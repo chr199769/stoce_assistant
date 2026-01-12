@@ -1,0 +1,35 @@
+{
+  "current_provider": "fake",
+  "models": {
+    "openai": {
+      "api_key": "your-openai-api-key",
+      "model_name": "gpt-4o",
+      "base_url": ""
+    },
+    "zhipu": {
+      "api_key": "c9e112188cc346b282a2c73c5c201ad0.XZyd7TL8aA8RgFpg",
+      "model_name": "glm-4.6v-flash",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "qwen": {
+      "api_key": "your-dashscope-api-key",
+      "model_name": "qwen-turbo",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "doubao": {
+      "api_key": "your-volcengine-api-key",
+      "model_name": "doubao-pro-4k",
+      "base_url": "https://ark.cn-beijing.volces.com/api/v3"
+    },
+    "deepseek": {
+      "api_key": "your-deepseek-api-key",
+      "model_name": "deepseek-chat",
+      "base_url": "https://api.deepseek.com"
+    },
+    "fake": {
+       "api_key": "",
+       "model_name": "fake-model",
+       "base_url": ""
+    }
+  }
+}

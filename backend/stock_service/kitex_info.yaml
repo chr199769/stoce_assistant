@@ -1,0 +1,3 @@
+kitexinfo:
+   ServiceName: 'stock_assistant.backend.stock_service'
+   ToolVersion: 'v1.20.0'
