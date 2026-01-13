@@ -3,7 +3,7 @@
 package aiservice
 
 import (
-	client "code.byted.org/kite/kitex/client"
+	client "github.com/cloudwego/kitex/client"
 	"context"
 	"errors"
 	kitex "github.com/cloudwego/kitex/pkg/serviceinfo"

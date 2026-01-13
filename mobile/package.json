@@ -6,7 +6,7 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
-    "start": "NODE_OPTIONS='-r ./polyfill.js' react-native start",
+    "start": "react-native start",
     "test": "jest"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
     "react": "19.2.0",
     "react-native": "0.83.1",
     "react-native-chart-kit": "^6.12.0",
+    "react-native-image-picker": "^8.2.1",
     "react-native-paper": "^5.14.5",
     "react-native-safe-area-context": "^5.6.2",
     "react-native-screens": "^4.19.0",

@@ -32,6 +32,16 @@ func NewClient() *Client {
 // GetStockInfo fetches real-time stock information
 // code format: sh600000, sz000001
 func (c *Client) GetStockInfo(ctx context.Context, code string) (*stock.StockInfo, error) {
+	// Auto-fix code prefix if missing
+	code = strings.TrimSpace(code)
+	if len(code) == 6 {
+		if strings.HasPrefix(code, "6") {
+			code = "sh" + code
+		} else if strings.HasPrefix(code, "0") || strings.HasPrefix(code, "3") {
+			code = "sz" + code
+		}
+	}
+
 	// Sina API format: http://hq.sinajs.cn/list=sh601006
 	url := fmt.Sprintf("http://hq.sinajs.cn/list=%s", code)
 
@@ -49,24 +59,35 @@ func (c *Client) GetStockInfo(ctx context.Context, code string) (*stock.StockInf
 	}
 	defer resp.Body.Close()
 
-	// Sina API returns GBK encoding, need to convert to UTF-8
-	reader := transform.NewReader(resp.Body, simplifiedchinese.GBK.NewDecoder())
-	body, err := io.ReadAll(reader)
+	// Sina API returns GBK/GB18030 encoding, need to convert to UTF-8
+	// Read raw bytes first to avoid reader error on invalid chars
+	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %v", err)
+		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	content := string(body)
+	var content string
+	decoder := simplifiedchinese.GBK.NewDecoder()
+	utf8Body, _, err := transform.Bytes(decoder, rawBody)
+	if err != nil {
+		// If decoding fails (e.g. GB18030 specific chars), try to use raw body if it's mostly ASCII compatible for numbers
+		// Or try to ignore errors?
+		// For now, let's log and fallback to treating it as string (might be garbled for name but numbers work)
+		fmt.Printf("GBK decoding failed for %s: %v. Using raw string.\n", code, err)
+		content = string(rawBody)
+	} else {
+		content = string(utf8Body)
+	}
 	// Response format: var hq_str_sh601006="大秦铁路,6.660,6.660,6.670,6.690,6.640,6.660,6.670,22759685,151717808.000,189400,6.660,119900,6.650,229400,6.640,147800,6.630,121700,6.620,100,6.670,165700,6.680,187800,6.690,266600,6.700,240200,6.710,2024-05-15,15:00:00,00,";
 
 	// Check if data is valid
 	if !strings.Contains(content, "=\"") {
-		return nil, fmt.Errorf("invalid stock code or empty response. Content: %s", content)
+		return nil, fmt.Errorf("invalid stock code or empty response. Content: %s, URL: %s", content, url)
 	}
 
 	parts := strings.Split(content, "=\"")
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("parse error")
+		return nil, fmt.Errorf("parse error. Content: %s", content)
 	}
 
 	dataStr := strings.TrimSuffix(parts[1], "\";\n")
@@ -86,7 +107,7 @@ func (c *Client) GetStockInfo(ctx context.Context, code string) (*stock.StockInf
 
 	// A basic valid response should have at least name, prices and date/time.
 	if len(fields) < 6 {
-		return nil, fmt.Errorf("unexpected data format: fields count %d. Data: %s", len(fields), dataStr)
+		return nil, fmt.Errorf("unexpected data format: fields count %d. Data: %s, URL: %s, Content: %s", len(fields), dataStr, url, content)
 	}
 
 	// Parse fields

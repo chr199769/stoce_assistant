@@ -3,9 +3,9 @@
 package ai
 
 import (
-	apache_warning "code.byted.org/kitex/apache_monitor"
 	"context"
 	"fmt"
+
 	thrift "github.com/cloudwego/kitex/pkg/protocol/bthrift/apache"
 )
 
@@ -59,7 +59,7 @@ var fieldIDToName_PredictionResult_ = map[int16]string{
 }
 
 func (p *PredictionResult_) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("PredictionResult_")
+	// // apache_warning.WarningApache("PredictionResult_")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -185,7 +185,7 @@ func (p *PredictionResult_) ReadField4(iprot thrift.TProtocol) error {
 }
 
 func (p *PredictionResult_) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("PredictionResult_")
+	// apache_warning.WarningApache("PredictionResult_")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("PredictionResult"); err != nil {
@@ -349,7 +349,7 @@ var fieldIDToName_GetPredictionRequest = map[int16]string{
 }
 
 func (p *GetPredictionRequest) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("GetPredictionRequest")
+	// apache_warning.WarningApache("GetPredictionRequest")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -475,7 +475,7 @@ func (p *GetPredictionRequest) ReadField4(iprot thrift.TProtocol) error {
 }
 
 func (p *GetPredictionRequest) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("GetPredictionRequest")
+	// apache_warning.WarningApache("GetPredictionRequest")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("GetPredictionRequest"); err != nil {
@@ -621,7 +621,7 @@ func (p *GetPredictionResponse) IsSetResult_() bool {
 }
 
 func (p *GetPredictionResponse) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("GetPredictionResponse")
+	// apache_warning.WarningApache("GetPredictionResponse")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -687,7 +687,7 @@ func (p *GetPredictionResponse) ReadField1(iprot thrift.TProtocol) error {
 }
 
 func (p *GetPredictionResponse) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("GetPredictionResponse")
+	// apache_warning.WarningApache("GetPredictionResponse")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("GetPredictionResponse"); err != nil {
@@ -773,7 +773,7 @@ var fieldIDToName_ImageRecognitionRequest = map[int16]string{
 }
 
 func (p *ImageRecognitionRequest) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("ImageRecognitionRequest")
+	// apache_warning.WarningApache("ImageRecognitionRequest")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -861,7 +861,7 @@ func (p *ImageRecognitionRequest) ReadField2(iprot thrift.TProtocol) error {
 }
 
 func (p *ImageRecognitionRequest) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("ImageRecognitionRequest")
+	// apache_warning.WarningApache("ImageRecognitionRequest")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("ImageRecognitionRequest"); err != nil {
@@ -967,7 +967,7 @@ var fieldIDToName_RecognizedStock = map[int16]string{
 }
 
 func (p *RecognizedStock) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("RecognizedStock")
+	// apache_warning.WarningApache("RecognizedStock")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -1055,7 +1055,7 @@ func (p *RecognizedStock) ReadField2(iprot thrift.TProtocol) error {
 }
 
 func (p *RecognizedStock) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("RecognizedStock")
+	// apache_warning.WarningApache("RecognizedStock")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("RecognizedStock"); err != nil {
@@ -1152,7 +1152,7 @@ var fieldIDToName_ImageRecognitionResponse = map[int16]string{
 }
 
 func (p *ImageRecognitionResponse) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("ImageRecognitionResponse")
+	// apache_warning.WarningApache("ImageRecognitionResponse")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -1233,7 +1233,7 @@ func (p *ImageRecognitionResponse) ReadField1(iprot thrift.TProtocol) error {
 }
 
 func (p *ImageRecognitionResponse) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("ImageRecognitionResponse")
+	// apache_warning.WarningApache("ImageRecognitionResponse")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("ImageRecognitionResponse"); err != nil {
@@ -1333,7 +1333,7 @@ func (p *AIServiceGetPredictionArgs) IsSetReq() bool {
 }
 
 func (p *AIServiceGetPredictionArgs) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceGetPredictionArgs")
+	// apache_warning.WarningApache("AIServiceGetPredictionArgs")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -1399,7 +1399,7 @@ func (p *AIServiceGetPredictionArgs) ReadField1(iprot thrift.TProtocol) error {
 }
 
 func (p *AIServiceGetPredictionArgs) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceGetPredictionArgs")
+	// apache_warning.WarningApache("AIServiceGetPredictionArgs")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("GetPrediction_args"); err != nil {
@@ -1485,7 +1485,7 @@ func (p *AIServiceGetPredictionResult) IsSetSuccess() bool {
 }
 
 func (p *AIServiceGetPredictionResult) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceGetPredictionResult")
+	// apache_warning.WarningApache("AIServiceGetPredictionResult")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -1551,7 +1551,7 @@ func (p *AIServiceGetPredictionResult) ReadField0(iprot thrift.TProtocol) error 
 }
 
 func (p *AIServiceGetPredictionResult) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceGetPredictionResult")
+	// apache_warning.WarningApache("AIServiceGetPredictionResult")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("GetPrediction_result"); err != nil {
@@ -1639,7 +1639,7 @@ func (p *AIServiceImageRecognitionArgs) IsSetReq() bool {
 }
 
 func (p *AIServiceImageRecognitionArgs) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceImageRecognitionArgs")
+	// apache_warning.WarningApache("AIServiceImageRecognitionArgs")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -1705,7 +1705,7 @@ func (p *AIServiceImageRecognitionArgs) ReadField1(iprot thrift.TProtocol) error
 }
 
 func (p *AIServiceImageRecognitionArgs) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceImageRecognitionArgs")
+	// apache_warning.WarningApache("AIServiceImageRecognitionArgs")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("ImageRecognition_args"); err != nil {
@@ -1791,7 +1791,7 @@ func (p *AIServiceImageRecognitionResult) IsSetSuccess() bool {
 }
 
 func (p *AIServiceImageRecognitionResult) Read(iprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceImageRecognitionResult")
+	// apache_warning.WarningApache("AIServiceImageRecognitionResult")
 
 	var fieldTypeId thrift.TType
 	var fieldId int16
@@ -1857,7 +1857,7 @@ func (p *AIServiceImageRecognitionResult) ReadField0(iprot thrift.TProtocol) err
 }
 
 func (p *AIServiceImageRecognitionResult) Write(oprot thrift.TProtocol) (err error) {
-	apache_warning.WarningApache("AIServiceImageRecognitionResult")
+	// apache_warning.WarningApache("AIServiceImageRecognitionResult")
 
 	var fieldId int16
 	if err = oprot.WriteStructBegin("ImageRecognition_result"); err != nil {

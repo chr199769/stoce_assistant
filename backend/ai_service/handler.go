@@ -46,8 +46,17 @@ func NewAIServiceImpl() *AIServiceImpl {
 	p, err := llm.NewLangChainProvider(context.Background(), c, fileConfig)
 	if err != nil {
 		log.Printf("failed to init langchain provider: %v", err)
-		log.Printf("falling back to mock provider")
-		return &AIServiceImpl{llmProvider: llm.NewMockProvider()}
+		// log.Printf("falling back to mock provider")
+		// return &AIServiceImpl{llmProvider: llm.NewMockProvider()}
+		// Instead of mock, we return a provider that is nil or error prone?
+		// Since NewLangChainProvider now returns error if config is missing.
+		// We should probably panic here if we strictly don't want mock.
+		// Or return a service that has nil provider and check in methods.
+		// Let's allow p to be nil but handle it in methods?
+		// No, let's make NewLangChainProvider return a valid provider even if config is empty?
+		// But I changed it to return error.
+		// So let's just log fatal.
+		log.Fatalf("Critical: Failed to init LLM provider and mock is disabled: %v", err)
 	}
 
 	return &AIServiceImpl{
@@ -71,5 +80,20 @@ func (s *AIServiceImpl) GetPrediction(ctx context.Context, req *ai.GetPrediction
 			Analysis:     analysis,
 			NewsSummary_: newsSummary,
 		},
+	}, nil
+}
+
+// ImageRecognition implements the AIServiceImpl interface.
+func (s *AIServiceImpl) ImageRecognition(ctx context.Context, req *ai.ImageRecognitionRequest) (resp *ai.ImageRecognitionResponse, err error) {
+	log.Printf("Received image recognition request: Model=%s, ImageSize=%d", req.Model, len(req.ImageData))
+
+	stocks, err := s.llmProvider.RecognizeImage(ctx, req.ImageData, req.Model)
+	if err != nil {
+		log.Printf("Image recognition failed: %v", err)
+		return nil, err
+	}
+
+	return &ai.ImageRecognitionResponse{
+		Stocks: stocks,
 	}, nil
 }

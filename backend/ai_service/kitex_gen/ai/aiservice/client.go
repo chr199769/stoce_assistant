@@ -3,10 +3,9 @@
 package aiservice
 
 import (
-	byted "code.byted.org/kite/kitex/byted"
-	client "code.byted.org/kite/kitex/client"
-	callopt "code.byted.org/kite/kitex/client/callopt"
 	"context"
+	client "github.com/cloudwego/kitex/client"
+	callopt "github.com/cloudwego/kitex/client/callopt"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
 )
 
@@ -20,10 +19,6 @@ type Client interface {
 func NewClient(destService string, opts ...client.Option) (Client, error) {
 	var options []client.Option
 	options = append(options, client.WithDestService(destService))
-
-	config := byted.NewClientConfig()
-	config.DestService = destService
-	options = append(options, byted.ClientSuiteWithConfig(serviceInfo(), config))
 
 	options = append(options, opts...)
 
@@ -57,35 +52,4 @@ func (p *kAIServiceClient) GetPrediction(ctx context.Context, req *ai.GetPredict
 func (p *kAIServiceClient) ImageRecognition(ctx context.Context, req *ai.ImageRecognitionRequest, callOptions ...callopt.Option) (r *ai.ImageRecognitionResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ImageRecognition(ctx, req)
-}
-
-// NewClientWithBytedConfig creates a client for the service defined in IDL.
-func NewClientWithBytedConfig(destService string, config *byted.ClientConfig, opts ...client.Option) (Client, error) {
-	if config == nil {
-		config = byted.NewClientConfig()
-	}
-	config.DestService = destService
-
-	var options []client.Option
-	options = append(options, client.WithDestService(destService))
-
-	clientServiceInfo := serviceInfoForClient()
-	options = append(options, byted.ClientSuiteWithConfig(clientServiceInfo, config))
-	options = append(options, opts...)
-	kc, err := client.NewClient(clientServiceInfo, options...)
-	if err != nil {
-		return nil, err
-	}
-	return &kAIServiceClient{
-		kClient: newServiceClient(kc),
-	}, nil
-}
-
-// MustNewClientWithBytedConfig creates a client for the service defined in IDL. It panics if any error occurs.
-func MustNewClientWithBytedConfig(destService string, config *byted.ClientConfig, opts ...client.Option) Client {
-	kc, err := NewClientWithBytedConfig(destService, config, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return kc
 }

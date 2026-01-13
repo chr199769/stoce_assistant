@@ -40,3 +40,13 @@ func _getrealtimeMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _imageMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _recognizestockimageMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

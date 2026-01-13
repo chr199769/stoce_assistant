@@ -20,6 +20,10 @@ func Register(r *server.Hertz) {
 	{
 		_api := root.Group("/api", _apiMw()...)
 		{
+			_image := _api.Group("/image", _imageMw()...)
+			_image.POST("/recognize", append(_recognizestockimageMw(), api.RecognizeStockImage)...)
+		}
+		{
 			_prediction := _api.Group("/prediction", _predictionMw()...)
 			_prediction.POST("/:code", append(_getpredictionMw(), api.GetPrediction)...)
 		}

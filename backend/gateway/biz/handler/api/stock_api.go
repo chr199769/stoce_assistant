@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"io"
 
 	"stock_assistant/backend/ai_service/kitex_gen/ai"
 	api "stock_assistant/backend/gateway/biz/model/api"
@@ -11,6 +12,7 @@ import (
 	"stock_assistant/backend/stock_service/kitex_gen/stock"
 
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
@@ -83,6 +85,71 @@ func GetPrediction(ctx context.Context, c *app.RequestContext) {
 		Confidence:  rpcResp.Result_.Confidence,
 		Analysis:    rpcResp.Result_.Analysis,
 		NewsSummary: rpcResp.Result_.NewsSummary_,
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// RecognizeStockImage .
+// @router /api/image/recognize [POST]
+func RecognizeStockImage(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.ImageRecognitionRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Read image file
+	fileHeader, err := c.FormFile("image")
+	if err != nil {
+		c.String(consts.StatusBadRequest, "Missing image file")
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.String(consts.StatusInternalServerError, "Failed to open image file")
+		return
+	}
+	defer file.Close()
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, "Failed to read image file")
+		return
+	}
+
+	model := c.PostForm("model")
+
+	// Call AI Service
+	rpcReq := &ai.ImageRecognitionRequest{
+		ImageData: fileBytes,
+		Model:     model,
+	}
+
+	hlog.Info("Calling AI Service for Image Recognition...")
+	rpcResp, err := rpc.AIClient.ImageRecognition(ctx, rpcReq)
+	if err != nil {
+		hlog.Errorf("AI Service failed: %v", err)
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+	hlog.Info("AI Service returned successfully")
+
+	// Map response
+	resp := &api.ImageRecognitionResponse{
+		Stocks: make([]*api.RecognizedStock, 0),
+	}
+
+	if rpcResp.Stocks != nil {
+		for _, s := range rpcResp.Stocks {
+			resp.Stocks = append(resp.Stocks, &api.RecognizedStock{
+				Code: s.Code,
+				Name: s.Name,
+			})
+		}
 	}
 
 	c.JSON(consts.StatusOK, resp)

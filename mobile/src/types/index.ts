@@ -20,3 +20,12 @@ export interface PredictionRequest {
   include_news: boolean;
   model: string;
 }
+
+export interface RecognizedStock {
+  code: string;
+  name: string;
+}
+
+export interface ImageRecognitionResponse {
+  stocks: RecognizedStock[];
+}

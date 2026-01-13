@@ -1,5 +1,5 @@
 {
-  "current_provider": "fake",
+  "current_provider": "zhipu",
   "models": {
     "openai": {
       "api_key": "your-openai-api-key",

@@ -1,5 +1,16 @@
 const util = require('util');
 
+if (!URL.canParse) {
+  URL.canParse = function (url, base) {
+    try {
+      new URL(url, base);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+}
+
 if (!util.styleText) {
   // Simple polyfill that ignores the style and returns the text
   // The format argument is ignored

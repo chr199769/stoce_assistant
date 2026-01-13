@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
-import { Appbar, Card, Text, FAB, Dialog, Portal, TextInput, Button } from 'react-native-paper';
-import { getRealtime } from '../api/stock';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { Card, Text, FAB, Dialog, Portal, TextInput, Button } from 'react-native-paper';
+import { getRealtime, recognizeStockImage } from '../api/stock';
 import { RealtimeResponse } from '../types';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 const WATCHLIST_KEY = 'stock_watchlist';
 
@@ -14,6 +15,7 @@ const HomeScreen = () => {
   const [visible, setVisible] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [fabOpen, setFabOpen] = useState(false);
 
   const navigation = useNavigation();
 
@@ -26,7 +28,10 @@ const HomeScreen = () => {
     try {
       const stored = await AsyncStorage.getItem(WATCHLIST_KEY);
       if (stored) {
-        setWatchlist(JSON.parse(stored));
+        // De-duplicate on load
+        const list = JSON.parse(stored);
+        const uniqueList = Array.from(new Set(list)) as string[];
+        setWatchlist(uniqueList);
       } else {
         // Default stocks
         const defaults = ['sh600519', 'sz000001', 'sh000001'];
@@ -52,10 +57,28 @@ const HomeScreen = () => {
     setLoading(true);
     try {
       const promises = watchlist.map(code => getRealtime(code));
-      const results = await Promise.all(promises);
-      setStocks(results);
-    } catch (error) {
-      console.error(error);
+      // Use Promise.allSettled to avoid entire failure if one stock fails
+      const results = await Promise.allSettled(promises);
+
+      const validStocks: RealtimeResponse[] = [];
+      const seenCodes = new Set<string>();
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const stock = result.value;
+          // De-duplicate stocks based on code
+          if (!seenCodes.has(stock.code)) {
+            seenCodes.add(stock.code);
+            validStocks.push(stock);
+          }
+        } else {
+          console.error(`Failed to fetch stock ${watchlist[index]}:`, result.reason);
+        }
+      });
+
+      setStocks(validStocks);
+    } catch (error: any) {
+      console.error('fetchStocks failed', error);
       // Alert.alert('Error', 'Failed to fetch stock data');
     } finally {
       setLoading(false);
@@ -80,6 +103,44 @@ const HomeScreen = () => {
     }
   };
 
+  const handleImageImport = async () => {
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: 1,
+    });
+
+    if (result.didCancel) return;
+    if (result.errorCode) {
+      Alert.alert('Error', result.errorMessage);
+      return;
+    }
+
+    if (result.assets && result.assets.length > 0) {
+      const asset = result.assets[0];
+      setLoading(true);
+      try {
+        const response = await recognizeStockImage(asset.uri!, asset.type!, asset.fileName!);
+        if (response.stocks.length > 0) {
+          const newCodes = response.stocks.map(s => s.code).filter(c => !watchlist.includes(c));
+          if (newCodes.length > 0) {
+            const newList = [...watchlist, ...newCodes];
+            saveWatchlist(newList);
+            Alert.alert('成功', `已添加 ${newCodes.length} 只股票: ${response.stocks.map(s => `${s.name}(${s.code})`).join(', ')}`);
+          } else {
+            Alert.alert('提示', '未发现新股票或股票已在列表中');
+          }
+        } else {
+          Alert.alert('提示', '未识别到股票信息');
+        }
+      } catch (e) {
+        Alert.alert('错误', '图片识别失败');
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const getColor = (change: number) => {
     if (change > 0) return '#F44336'; // Red for up
     if (change < 0) return '#4CAF50'; // Green for down
@@ -88,9 +149,11 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Appbar.Header style={styles.header}>
-        <Appbar.Content title="股票助手" titleStyle={styles.headerTitle} />
-      </Appbar.Header>
+      <SafeAreaView style={styles.headerContainer}>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>股票助手</Text>
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -98,9 +161,9 @@ const HomeScreen = () => {
       >
         {stocks.map((stock) => (
           <Card key={stock.code} style={styles.card} onPress={() => {
-             // Navigate to prediction with this code
-             // @ts-ignore
-             navigation.navigate('Prediction', { code: stock.code });
+            // Navigate to prediction with this code
+            // @ts-ignore
+            navigation.navigate('Prediction', { code: stock.code });
           }}>
             <Card.Content>
               <View style={styles.row}>
@@ -140,11 +203,16 @@ const HomeScreen = () => {
         </Dialog>
       </Portal>
 
-      <FAB
-        icon="plus"
+      <FAB.Group
+        open={fabOpen}
+        visible
+        icon={fabOpen ? 'close' : 'plus'}
+        actions={[
+          { icon: 'plus', label: '手动添加', onPress: showDialog },
+          { icon: 'image', label: '图片导入', onPress: handleImageImport },
+        ]}
+        onStateChange={({ open }) => setFabOpen(open)}
         style={styles.fab}
-        onPress={showDialog}
-        label="添加"
       />
     </View>
   );
@@ -155,12 +223,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
-  header: {
+  headerContainer: {
+    backgroundColor: '#1E88E5',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  headerContent: {
+    height: 56,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
     backgroundColor: '#1E88E5',
   },
   headerTitle: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+    fontSize: 20,
   },
   scrollContent: {
     padding: 16,
@@ -192,7 +268,6 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 0,
-    backgroundColor: '#1E88E5',
   },
 });
 

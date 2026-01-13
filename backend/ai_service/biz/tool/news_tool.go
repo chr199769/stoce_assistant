@@ -2,6 +2,8 @@ package tool
 
 import (
 	"context"
+	"fmt"
+	"strings"
 )
 
 type NewsTool struct{}
@@ -19,6 +21,13 @@ func (t *NewsTool) Description() string {
 }
 
 func (t *NewsTool) Call(ctx context.Context, input string) (string, error) {
-	// Mock news
-	return "1. Recent financial report shows 20% growth.\n2. New product launch announced next month.\n3. Industry sector is recovering.", nil
+	// Fetch real news using EastMoney API
+	news, err := GetStockNews(input)
+	if err != nil {
+		return fmt.Sprintf("Error fetching news: %v", err), nil
+	}
+	if len(news) == 0 {
+		return "No recent news found for this stock.", nil
+	}
+	return strings.Join(news, "\n"), nil
 }
