@@ -7,7 +7,7 @@
       "base_url": ""
     },
     "zhipu": {
-      "api_key": "c9e112188cc346b282a2c73c5c201ad0.XZyd7TL8aA8RgFpg",
+      "api_key": "123",
       "model_name": "glm-4.6v-flash",
       "base_url": "https://open.bigmodel.cn/api/paas/v4/"
     },
@@ -22,7 +22,7 @@
       "base_url": "https://ark.cn-beijing.volces.com/api/v3"
     },
     "deepseek": {
-      "api_key": "sk-e956f8b35ccc4e678cd8cba045034281",
+      "api_key": "123",
       "model_name": "deepseek-chat",
       "base_url": "https://api.deepseek.com"
     }
