@@ -594,7 +594,7 @@ func (p *GetRealtimeResponse) DeepCopy(s interface{}) error {
 	return nil
 }
 
-func (p *MarketIndex) FastRead(buf []byte) (int, error) {
+func (p *FinancialData) FastRead(buf []byte) (int, error) {
 
 	var err error
 	var offset int
@@ -667,6 +667,34 @@ func (p *MarketIndex) FastRead(buf []byte) (int, error) {
 					goto SkipFieldError
 				}
 			}
+		case 5:
+			if fieldTypeId == thrift.DOUBLE {
+				l, err = p.FastReadField5(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
+		case 6:
+			if fieldTypeId == thrift.DOUBLE {
+				l, err = p.FastReadField6(buf[offset:])
+				offset += l
+				if err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
+				offset += l
+				if err != nil {
+					goto SkipFieldError
+				}
+			}
 		default:
 			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
 			offset += l
@@ -680,12 +708,12 @@ func (p *MarketIndex) FastRead(buf []byte) (int, error) {
 ReadFieldBeginError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
 ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_MarketIndex[fieldId]), err)
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_FinancialData[fieldId]), err)
 SkipFieldError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
 }
 
-func (p *MarketIndex) FastReadField1(buf []byte) (int, error) {
+func (p *FinancialData) FastReadField1(buf []byte) (int, error) {
 	offset := 0
 
 	var _field string
@@ -695,11 +723,11 @@ func (p *MarketIndex) FastReadField1(buf []byte) (int, error) {
 		offset += l
 		_field = v
 	}
-	p.Name = _field
+	p.ReportDate = _field
 	return offset, nil
 }
 
-func (p *MarketIndex) FastReadField2(buf []byte) (int, error) {
+func (p *FinancialData) FastReadField2(buf []byte) (int, error) {
 	offset := 0
 
 	var _field float64
@@ -709,11 +737,11 @@ func (p *MarketIndex) FastReadField2(buf []byte) (int, error) {
 		offset += l
 		_field = v
 	}
-	p.Value = _field
+	p.TotalRevenue = _field
 	return offset, nil
 }
 
-func (p *MarketIndex) FastReadField3(buf []byte) (int, error) {
+func (p *FinancialData) FastReadField3(buf []byte) (int, error) {
 	offset := 0
 
 	var _field float64
@@ -723,11 +751,11 @@ func (p *MarketIndex) FastReadField3(buf []byte) (int, error) {
 		offset += l
 		_field = v
 	}
-	p.Change = _field
+	p.NetProfit = _field
 	return offset, nil
 }
 
-func (p *MarketIndex) FastReadField4(buf []byte) (int, error) {
+func (p *FinancialData) FastReadField4(buf []byte) (int, error) {
 	offset := 0
 
 	var _field float64
@@ -737,114 +765,178 @@ func (p *MarketIndex) FastReadField4(buf []byte) (int, error) {
 		offset += l
 		_field = v
 	}
-	p.ChangePercent = _field
+	p.Eps = _field
 	return offset, nil
 }
 
-func (p *MarketIndex) FastWrite(buf []byte) int {
+func (p *FinancialData) FastReadField5(buf []byte) (int, error) {
+	offset := 0
+
+	var _field float64
+	if v, l, err := thrift.Binary.ReadDouble(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.RevenueYoy = _field
+	return offset, nil
+}
+
+func (p *FinancialData) FastReadField6(buf []byte) (int, error) {
+	offset := 0
+
+	var _field float64
+	if v, l, err := thrift.Binary.ReadDouble(buf[offset:]); err != nil {
+		return offset, err
+	} else {
+		offset += l
+		_field = v
+	}
+	p.ProfitYoy = _field
+	return offset, nil
+}
+
+func (p *FinancialData) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
 
-func (p *MarketIndex) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+func (p *FinancialData) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField2(buf[offset:], w)
 		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField4(buf[offset:], w)
+		offset += p.fastWriteField5(buf[offset:], w)
+		offset += p.fastWriteField6(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
 }
 
-func (p *MarketIndex) BLength() int {
+func (p *FinancialData) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
 		l += p.field3Length()
 		l += p.field4Length()
+		l += p.field5Length()
+		l += p.field6Length()
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
 }
 
-func (p *MarketIndex) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+func (p *FinancialData) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 1)
-	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.Name)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.ReportDate)
 	return offset
 }
 
-func (p *MarketIndex) fastWriteField2(buf []byte, w thrift.NocopyWriter) int {
+func (p *FinancialData) fastWriteField2(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.DOUBLE, 2)
-	offset += thrift.Binary.WriteDouble(buf[offset:], p.Value)
+	offset += thrift.Binary.WriteDouble(buf[offset:], p.TotalRevenue)
 	return offset
 }
 
-func (p *MarketIndex) fastWriteField3(buf []byte, w thrift.NocopyWriter) int {
+func (p *FinancialData) fastWriteField3(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.DOUBLE, 3)
-	offset += thrift.Binary.WriteDouble(buf[offset:], p.Change)
+	offset += thrift.Binary.WriteDouble(buf[offset:], p.NetProfit)
 	return offset
 }
 
-func (p *MarketIndex) fastWriteField4(buf []byte, w thrift.NocopyWriter) int {
+func (p *FinancialData) fastWriteField4(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.DOUBLE, 4)
-	offset += thrift.Binary.WriteDouble(buf[offset:], p.ChangePercent)
+	offset += thrift.Binary.WriteDouble(buf[offset:], p.Eps)
 	return offset
 }
 
-func (p *MarketIndex) field1Length() int {
+func (p *FinancialData) fastWriteField5(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.DOUBLE, 5)
+	offset += thrift.Binary.WriteDouble(buf[offset:], p.RevenueYoy)
+	return offset
+}
+
+func (p *FinancialData) fastWriteField6(buf []byte, w thrift.NocopyWriter) int {
+	offset := 0
+	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.DOUBLE, 6)
+	offset += thrift.Binary.WriteDouble(buf[offset:], p.ProfitYoy)
+	return offset
+}
+
+func (p *FinancialData) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
-	l += thrift.Binary.StringLengthNocopy(p.Name)
+	l += thrift.Binary.StringLengthNocopy(p.ReportDate)
 	return l
 }
 
-func (p *MarketIndex) field2Length() int {
+func (p *FinancialData) field2Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
 	l += thrift.Binary.DoubleLength()
 	return l
 }
 
-func (p *MarketIndex) field3Length() int {
+func (p *FinancialData) field3Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
 	l += thrift.Binary.DoubleLength()
 	return l
 }
 
-func (p *MarketIndex) field4Length() int {
+func (p *FinancialData) field4Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
 	l += thrift.Binary.DoubleLength()
 	return l
 }
 
-func (p *MarketIndex) DeepCopy(s interface{}) error {
-	src, ok := s.(*MarketIndex)
+func (p *FinancialData) field5Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.DoubleLength()
+	return l
+}
+
+func (p *FinancialData) field6Length() int {
+	l := 0
+	l += thrift.Binary.FieldBeginLength()
+	l += thrift.Binary.DoubleLength()
+	return l
+}
+
+func (p *FinancialData) DeepCopy(s interface{}) error {
+	src, ok := s.(*FinancialData)
 	if !ok {
 		return fmt.Errorf("%T's type not matched %T", s, p)
 	}
 
-	if src.Name != "" {
-		p.Name = kutils.StringDeepCopy(src.Name)
+	if src.ReportDate != "" {
+		p.ReportDate = kutils.StringDeepCopy(src.ReportDate)
 	}
 
-	p.Value = src.Value
+	p.TotalRevenue = src.TotalRevenue
 
-	p.Change = src.Change
+	p.NetProfit = src.NetProfit
 
-	p.ChangePercent = src.ChangePercent
+	p.Eps = src.Eps
+
+	p.RevenueYoy = src.RevenueYoy
+
+	p.ProfitYoy = src.ProfitYoy
 
 	return nil
 }
 
-func (p *SectorInfo) FastRead(buf []byte) (int, error) {
+func (p *GetFinancialReportRequest) FastRead(buf []byte) (int, error) {
 
 	var err error
 	var offset int
@@ -875,34 +967,6 @@ func (p *SectorInfo) FastRead(buf []byte) (int, error) {
 					goto SkipFieldError
 				}
 			}
-		case 2:
-			if fieldTypeId == thrift.DOUBLE {
-				l, err = p.FastReadField2(buf[offset:])
-				offset += l
-				if err != nil {
-					goto ReadFieldError
-				}
-			} else {
-				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-				offset += l
-				if err != nil {
-					goto SkipFieldError
-				}
-			}
-		case 3:
-			if fieldTypeId == thrift.I64 {
-				l, err = p.FastReadField3(buf[offset:])
-				offset += l
-				if err != nil {
-					goto ReadFieldError
-				}
-			} else {
-				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-				offset += l
-				if err != nil {
-					goto SkipFieldError
-				}
-			}
 		default:
 			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
 			offset += l
@@ -916,12 +980,12 @@ func (p *SectorInfo) FastRead(buf []byte) (int, error) {
 ReadFieldBeginError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
 ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_SectorInfo[fieldId]), err)
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_GetFinancialReportRequest[fieldId]), err)
 SkipFieldError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
 }
 
-func (p *SectorInfo) FastReadField1(buf []byte) (int, error) {
+func (p *GetFinancialReportRequest) FastReadField1(buf []byte) (int, error) {
 	offset := 0
 
 	var _field string
@@ -931,179 +995,60 @@ func (p *SectorInfo) FastReadField1(buf []byte) (int, error) {
 		offset += l
 		_field = v
 	}
-	p.Name = _field
+	p.Code = _field
 	return offset, nil
 }
 
-func (p *SectorInfo) FastReadField2(buf []byte) (int, error) {
-	offset := 0
-
-	var _field float64
-	if v, l, err := thrift.Binary.ReadDouble(buf[offset:]); err != nil {
-		return offset, err
-	} else {
-		offset += l
-		_field = v
-	}
-	p.ChangePercent = _field
-	return offset, nil
-}
-
-func (p *SectorInfo) FastReadField3(buf []byte) (int, error) {
-	offset := 0
-
-	var _field int64
-	if v, l, err := thrift.Binary.ReadI64(buf[offset:]); err != nil {
-		return offset, err
-	} else {
-		offset += l
-		_field = v
-	}
-	p.Volume = _field
-	return offset, nil
-}
-
-func (p *SectorInfo) FastWrite(buf []byte) int {
+func (p *GetFinancialReportRequest) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
 
-func (p *SectorInfo) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+func (p *GetFinancialReportRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
-		offset += p.fastWriteField2(buf[offset:], w)
-		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField1(buf[offset:], w)
 	}
 	offset += thrift.Binary.WriteFieldStop(buf[offset:])
 	return offset
 }
 
-func (p *SectorInfo) BLength() int {
+func (p *GetFinancialReportRequest) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
-		l += p.field2Length()
-		l += p.field3Length()
 	}
 	l += thrift.Binary.FieldStopLength()
 	return l
 }
 
-func (p *SectorInfo) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+func (p *GetFinancialReportRequest) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 1)
-	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.Name)
+	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.Code)
 	return offset
 }
 
-func (p *SectorInfo) fastWriteField2(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.DOUBLE, 2)
-	offset += thrift.Binary.WriteDouble(buf[offset:], p.ChangePercent)
-	return offset
-}
-
-func (p *SectorInfo) fastWriteField3(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.I64, 3)
-	offset += thrift.Binary.WriteI64(buf[offset:], p.Volume)
-	return offset
-}
-
-func (p *SectorInfo) field1Length() int {
+func (p *GetFinancialReportRequest) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
-	l += thrift.Binary.StringLengthNocopy(p.Name)
+	l += thrift.Binary.StringLengthNocopy(p.Code)
 	return l
 }
 
-func (p *SectorInfo) field2Length() int {
-	l := 0
-	l += thrift.Binary.FieldBeginLength()
-	l += thrift.Binary.DoubleLength()
-	return l
-}
-
-func (p *SectorInfo) field3Length() int {
-	l := 0
-	l += thrift.Binary.FieldBeginLength()
-	l += thrift.Binary.I64Length()
-	return l
-}
-
-func (p *SectorInfo) DeepCopy(s interface{}) error {
-	src, ok := s.(*SectorInfo)
+func (p *GetFinancialReportRequest) DeepCopy(s interface{}) error {
+	src, ok := s.(*GetFinancialReportRequest)
 	if !ok {
 		return fmt.Errorf("%T's type not matched %T", s, p)
 	}
 
-	if src.Name != "" {
-		p.Name = kutils.StringDeepCopy(src.Name)
+	if src.Code != "" {
+		p.Code = kutils.StringDeepCopy(src.Code)
 	}
-
-	p.ChangePercent = src.ChangePercent
-
-	p.Volume = src.Volume
 
 	return nil
 }
 
-func (p *GetMarketSummaryRequest) FastRead(buf []byte) (int, error) {
-
-	var err error
-	var offset int
-	var l int
-	var fieldTypeId thrift.TType
-	var fieldId int16
-	for {
-		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
-		offset += l
-		if err != nil {
-			goto ReadFieldBeginError
-		}
-		if fieldTypeId == thrift.STOP {
-			break
-		}
-		l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-		offset += l
-		if err != nil {
-			goto SkipFieldError
-		}
-	}
-
-	return offset, nil
-ReadFieldBeginError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
-SkipFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
-}
-
-func (p *GetMarketSummaryRequest) FastWrite(buf []byte) int {
-	return p.FastWriteNocopy(buf, nil)
-}
-
-func (p *GetMarketSummaryRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	if p != nil {
-	}
-	offset += thrift.Binary.WriteFieldStop(buf[offset:])
-	return offset
-}
-
-func (p *GetMarketSummaryRequest) BLength() int {
-	l := 0
-	if p != nil {
-	}
-	l += thrift.Binary.FieldStopLength()
-	return l
-}
-
-func (p *GetMarketSummaryRequest) DeepCopy(s interface{}) error {
-
-	return nil
-}
-
-func (p *GetMarketSummaryResponse) FastRead(buf []byte) (int, error) {
+func (p *GetFinancialReportResponse) FastRead(buf []byte) (int, error) {
 
 	var err error
 	var offset int
@@ -1147,12 +1092,12 @@ func (p *GetMarketSummaryResponse) FastRead(buf []byte) (int, error) {
 ReadFieldBeginError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
 ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_GetMarketSummaryResponse[fieldId]), err)
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_GetFinancialReportResponse[fieldId]), err)
 SkipFieldError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
 }
 
-func (p *GetMarketSummaryResponse) FastReadField1(buf []byte) (int, error) {
+func (p *GetFinancialReportResponse) FastReadField1(buf []byte) (int, error) {
 	offset := 0
 
 	_, size, l, err := thrift.Binary.ReadListBegin(buf[offset:])
@@ -1160,8 +1105,8 @@ func (p *GetMarketSummaryResponse) FastReadField1(buf []byte) (int, error) {
 	if err != nil {
 		return offset, err
 	}
-	_field := make([]*MarketIndex, 0, size)
-	values := make([]MarketIndex, size)
+	_field := make([]*FinancialData, 0, size)
+	values := make([]FinancialData, size)
 	for i := 0; i < size; i++ {
 		_elem := &values[i]
 		_elem.InitDefault()
@@ -1173,15 +1118,15 @@ func (p *GetMarketSummaryResponse) FastReadField1(buf []byte) (int, error) {
 
 		_field = append(_field, _elem)
 	}
-	p.Indices = _field
+	p.Reports = _field
 	return offset, nil
 }
 
-func (p *GetMarketSummaryResponse) FastWrite(buf []byte) int {
+func (p *GetFinancialReportResponse) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
 
-func (p *GetMarketSummaryResponse) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+func (p *GetFinancialReportResponse) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
@@ -1190,7 +1135,7 @@ func (p *GetMarketSummaryResponse) FastWriteNocopy(buf []byte, w thrift.NocopyWr
 	return offset
 }
 
-func (p *GetMarketSummaryResponse) BLength() int {
+func (p *GetFinancialReportResponse) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
@@ -1199,13 +1144,13 @@ func (p *GetMarketSummaryResponse) BLength() int {
 	return l
 }
 
-func (p *GetMarketSummaryResponse) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+func (p *GetFinancialReportResponse) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.LIST, 1)
 	listBeginOffset := offset
 	offset += thrift.Binary.ListBeginLength()
 	var length int
-	for _, v := range p.Indices {
+	for _, v := range p.Reports {
 		length++
 		offset += v.FastWriteNocopy(buf[offset:], w)
 	}
@@ -1213,235 +1158,35 @@ func (p *GetMarketSummaryResponse) fastWriteField1(buf []byte, w thrift.NocopyWr
 	return offset
 }
 
-func (p *GetMarketSummaryResponse) field1Length() int {
+func (p *GetFinancialReportResponse) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
 	l += thrift.Binary.ListBeginLength()
-	for _, v := range p.Indices {
+	for _, v := range p.Reports {
 		_ = v
 		l += v.BLength()
 	}
 	return l
 }
 
-func (p *GetMarketSummaryResponse) DeepCopy(s interface{}) error {
-	src, ok := s.(*GetMarketSummaryResponse)
+func (p *GetFinancialReportResponse) DeepCopy(s interface{}) error {
+	src, ok := s.(*GetFinancialReportResponse)
 	if !ok {
 		return fmt.Errorf("%T's type not matched %T", s, p)
 	}
 
-	if src.Indices != nil {
-		p.Indices = make([]*MarketIndex, 0, len(src.Indices))
-		for _, elem := range src.Indices {
-			var _elem *MarketIndex
+	if src.Reports != nil {
+		p.Reports = make([]*FinancialData, 0, len(src.Reports))
+		for _, elem := range src.Reports {
+			var _elem *FinancialData
 			if elem != nil {
-				_elem = &MarketIndex{}
+				_elem = &FinancialData{}
 				if err := _elem.DeepCopy(elem); err != nil {
 					return err
 				}
 			}
 
-			p.Indices = append(p.Indices, _elem)
-		}
-	}
-
-	return nil
-}
-
-func (p *GetMarketSectorsRequest) FastRead(buf []byte) (int, error) {
-
-	var err error
-	var offset int
-	var l int
-	var fieldTypeId thrift.TType
-	var fieldId int16
-	for {
-		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
-		offset += l
-		if err != nil {
-			goto ReadFieldBeginError
-		}
-		if fieldTypeId == thrift.STOP {
-			break
-		}
-		l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-		offset += l
-		if err != nil {
-			goto SkipFieldError
-		}
-	}
-
-	return offset, nil
-ReadFieldBeginError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
-SkipFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
-}
-
-func (p *GetMarketSectorsRequest) FastWrite(buf []byte) int {
-	return p.FastWriteNocopy(buf, nil)
-}
-
-func (p *GetMarketSectorsRequest) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	if p != nil {
-	}
-	offset += thrift.Binary.WriteFieldStop(buf[offset:])
-	return offset
-}
-
-func (p *GetMarketSectorsRequest) BLength() int {
-	l := 0
-	if p != nil {
-	}
-	l += thrift.Binary.FieldStopLength()
-	return l
-}
-
-func (p *GetMarketSectorsRequest) DeepCopy(s interface{}) error {
-
-	return nil
-}
-
-func (p *GetMarketSectorsResponse) FastRead(buf []byte) (int, error) {
-
-	var err error
-	var offset int
-	var l int
-	var fieldTypeId thrift.TType
-	var fieldId int16
-	for {
-		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
-		offset += l
-		if err != nil {
-			goto ReadFieldBeginError
-		}
-		if fieldTypeId == thrift.STOP {
-			break
-		}
-		switch fieldId {
-		case 1:
-			if fieldTypeId == thrift.LIST {
-				l, err = p.FastReadField1(buf[offset:])
-				offset += l
-				if err != nil {
-					goto ReadFieldError
-				}
-			} else {
-				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-				offset += l
-				if err != nil {
-					goto SkipFieldError
-				}
-			}
-		default:
-			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-			offset += l
-			if err != nil {
-				goto SkipFieldError
-			}
-		}
-	}
-
-	return offset, nil
-ReadFieldBeginError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
-ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_GetMarketSectorsResponse[fieldId]), err)
-SkipFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
-}
-
-func (p *GetMarketSectorsResponse) FastReadField1(buf []byte) (int, error) {
-	offset := 0
-
-	_, size, l, err := thrift.Binary.ReadListBegin(buf[offset:])
-	offset += l
-	if err != nil {
-		return offset, err
-	}
-	_field := make([]*SectorInfo, 0, size)
-	values := make([]SectorInfo, size)
-	for i := 0; i < size; i++ {
-		_elem := &values[i]
-		_elem.InitDefault()
-		if l, err := _elem.FastRead(buf[offset:]); err != nil {
-			return offset, err
-		} else {
-			offset += l
-		}
-
-		_field = append(_field, _elem)
-	}
-	p.Sectors = _field
-	return offset, nil
-}
-
-func (p *GetMarketSectorsResponse) FastWrite(buf []byte) int {
-	return p.FastWriteNocopy(buf, nil)
-}
-
-func (p *GetMarketSectorsResponse) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	if p != nil {
-		offset += p.fastWriteField1(buf[offset:], w)
-	}
-	offset += thrift.Binary.WriteFieldStop(buf[offset:])
-	return offset
-}
-
-func (p *GetMarketSectorsResponse) BLength() int {
-	l := 0
-	if p != nil {
-		l += p.field1Length()
-	}
-	l += thrift.Binary.FieldStopLength()
-	return l
-}
-
-func (p *GetMarketSectorsResponse) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.LIST, 1)
-	listBeginOffset := offset
-	offset += thrift.Binary.ListBeginLength()
-	var length int
-	for _, v := range p.Sectors {
-		length++
-		offset += v.FastWriteNocopy(buf[offset:], w)
-	}
-	thrift.Binary.WriteListBegin(buf[listBeginOffset:], thrift.STRUCT, length)
-	return offset
-}
-
-func (p *GetMarketSectorsResponse) field1Length() int {
-	l := 0
-	l += thrift.Binary.FieldBeginLength()
-	l += thrift.Binary.ListBeginLength()
-	for _, v := range p.Sectors {
-		_ = v
-		l += v.BLength()
-	}
-	return l
-}
-
-func (p *GetMarketSectorsResponse) DeepCopy(s interface{}) error {
-	src, ok := s.(*GetMarketSectorsResponse)
-	if !ok {
-		return fmt.Errorf("%T's type not matched %T", s, p)
-	}
-
-	if src.Sectors != nil {
-		p.Sectors = make([]*SectorInfo, 0, len(src.Sectors))
-		for _, elem := range src.Sectors {
-			var _elem *SectorInfo
-			if elem != nil {
-				_elem = &SectorInfo{}
-				if err := _elem.DeepCopy(elem); err != nil {
-					return err
-				}
-			}
-
-			p.Sectors = append(p.Sectors, _elem)
+			p.Reports = append(p.Reports, _elem)
 		}
 	}
 
@@ -1682,7 +1427,7 @@ func (p *StockServiceGetRealtimeResult) DeepCopy(s interface{}) error {
 	return nil
 }
 
-func (p *StockServiceGetMarketSummaryArgs) FastRead(buf []byte) (int, error) {
+func (p *StockServiceGetFinancialReportArgs) FastRead(buf []byte) (int, error) {
 
 	var err error
 	var offset int
@@ -1726,14 +1471,14 @@ func (p *StockServiceGetMarketSummaryArgs) FastRead(buf []byte) (int, error) {
 ReadFieldBeginError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
 ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockServiceGetMarketSummaryArgs[fieldId]), err)
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockServiceGetFinancialReportArgs[fieldId]), err)
 SkipFieldError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
 }
 
-func (p *StockServiceGetMarketSummaryArgs) FastReadField1(buf []byte) (int, error) {
+func (p *StockServiceGetFinancialReportArgs) FastReadField1(buf []byte) (int, error) {
 	offset := 0
-	_field := NewGetMarketSummaryRequest()
+	_field := NewGetFinancialReportRequest()
 	if l, err := _field.FastRead(buf[offset:]); err != nil {
 		return offset, err
 	} else {
@@ -1743,11 +1488,11 @@ func (p *StockServiceGetMarketSummaryArgs) FastReadField1(buf []byte) (int, erro
 	return offset, nil
 }
 
-func (p *StockServiceGetMarketSummaryArgs) FastWrite(buf []byte) int {
+func (p *StockServiceGetFinancialReportArgs) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
 
-func (p *StockServiceGetMarketSummaryArgs) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+func (p *StockServiceGetFinancialReportArgs) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField1(buf[offset:], w)
@@ -1756,7 +1501,7 @@ func (p *StockServiceGetMarketSummaryArgs) FastWriteNocopy(buf []byte, w thrift.
 	return offset
 }
 
-func (p *StockServiceGetMarketSummaryArgs) BLength() int {
+func (p *StockServiceGetFinancialReportArgs) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field1Length()
@@ -1765,29 +1510,29 @@ func (p *StockServiceGetMarketSummaryArgs) BLength() int {
 	return l
 }
 
-func (p *StockServiceGetMarketSummaryArgs) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
+func (p *StockServiceGetFinancialReportArgs) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 1)
 	offset += p.Req.FastWriteNocopy(buf[offset:], w)
 	return offset
 }
 
-func (p *StockServiceGetMarketSummaryArgs) field1Length() int {
+func (p *StockServiceGetFinancialReportArgs) field1Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
 	l += p.Req.BLength()
 	return l
 }
 
-func (p *StockServiceGetMarketSummaryArgs) DeepCopy(s interface{}) error {
-	src, ok := s.(*StockServiceGetMarketSummaryArgs)
+func (p *StockServiceGetFinancialReportArgs) DeepCopy(s interface{}) error {
+	src, ok := s.(*StockServiceGetFinancialReportArgs)
 	if !ok {
 		return fmt.Errorf("%T's type not matched %T", s, p)
 	}
 
-	var _req *GetMarketSummaryRequest
+	var _req *GetFinancialReportRequest
 	if src.Req != nil {
-		_req = &GetMarketSummaryRequest{}
+		_req = &GetFinancialReportRequest{}
 		if err := _req.DeepCopy(src.Req); err != nil {
 			return err
 		}
@@ -1797,7 +1542,7 @@ func (p *StockServiceGetMarketSummaryArgs) DeepCopy(s interface{}) error {
 	return nil
 }
 
-func (p *StockServiceGetMarketSummaryResult) FastRead(buf []byte) (int, error) {
+func (p *StockServiceGetFinancialReportResult) FastRead(buf []byte) (int, error) {
 
 	var err error
 	var offset int
@@ -1841,14 +1586,14 @@ func (p *StockServiceGetMarketSummaryResult) FastRead(buf []byte) (int, error) {
 ReadFieldBeginError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
 ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockServiceGetMarketSummaryResult[fieldId]), err)
+	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockServiceGetFinancialReportResult[fieldId]), err)
 SkipFieldError:
 	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
 }
 
-func (p *StockServiceGetMarketSummaryResult) FastReadField0(buf []byte) (int, error) {
+func (p *StockServiceGetFinancialReportResult) FastReadField0(buf []byte) (int, error) {
 	offset := 0
-	_field := NewGetMarketSummaryResponse()
+	_field := NewGetFinancialReportResponse()
 	if l, err := _field.FastRead(buf[offset:]); err != nil {
 		return offset, err
 	} else {
@@ -1858,11 +1603,11 @@ func (p *StockServiceGetMarketSummaryResult) FastReadField0(buf []byte) (int, er
 	return offset, nil
 }
 
-func (p *StockServiceGetMarketSummaryResult) FastWrite(buf []byte) int {
+func (p *StockServiceGetFinancialReportResult) FastWrite(buf []byte) int {
 	return p.FastWriteNocopy(buf, nil)
 }
 
-func (p *StockServiceGetMarketSummaryResult) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
+func (p *StockServiceGetFinancialReportResult) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
 		offset += p.fastWriteField0(buf[offset:], w)
@@ -1871,7 +1616,7 @@ func (p *StockServiceGetMarketSummaryResult) FastWriteNocopy(buf []byte, w thrif
 	return offset
 }
 
-func (p *StockServiceGetMarketSummaryResult) BLength() int {
+func (p *StockServiceGetFinancialReportResult) BLength() int {
 	l := 0
 	if p != nil {
 		l += p.field0Length()
@@ -1880,7 +1625,7 @@ func (p *StockServiceGetMarketSummaryResult) BLength() int {
 	return l
 }
 
-func (p *StockServiceGetMarketSummaryResult) fastWriteField0(buf []byte, w thrift.NocopyWriter) int {
+func (p *StockServiceGetFinancialReportResult) fastWriteField0(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p.IsSetSuccess() {
 		offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 0)
@@ -1889,7 +1634,7 @@ func (p *StockServiceGetMarketSummaryResult) fastWriteField0(buf []byte, w thrif
 	return offset
 }
 
-func (p *StockServiceGetMarketSummaryResult) field0Length() int {
+func (p *StockServiceGetFinancialReportResult) field0Length() int {
 	l := 0
 	if p.IsSetSuccess() {
 		l += thrift.Binary.FieldBeginLength()
@@ -1898,249 +1643,15 @@ func (p *StockServiceGetMarketSummaryResult) field0Length() int {
 	return l
 }
 
-func (p *StockServiceGetMarketSummaryResult) DeepCopy(s interface{}) error {
-	src, ok := s.(*StockServiceGetMarketSummaryResult)
+func (p *StockServiceGetFinancialReportResult) DeepCopy(s interface{}) error {
+	src, ok := s.(*StockServiceGetFinancialReportResult)
 	if !ok {
 		return fmt.Errorf("%T's type not matched %T", s, p)
 	}
 
-	var _success *GetMarketSummaryResponse
+	var _success *GetFinancialReportResponse
 	if src.Success != nil {
-		_success = &GetMarketSummaryResponse{}
-		if err := _success.DeepCopy(src.Success); err != nil {
-			return err
-		}
-	}
-	p.Success = _success
-
-	return nil
-}
-
-func (p *StockServiceGetMarketSectorsArgs) FastRead(buf []byte) (int, error) {
-
-	var err error
-	var offset int
-	var l int
-	var fieldTypeId thrift.TType
-	var fieldId int16
-	for {
-		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
-		offset += l
-		if err != nil {
-			goto ReadFieldBeginError
-		}
-		if fieldTypeId == thrift.STOP {
-			break
-		}
-		switch fieldId {
-		case 1:
-			if fieldTypeId == thrift.STRUCT {
-				l, err = p.FastReadField1(buf[offset:])
-				offset += l
-				if err != nil {
-					goto ReadFieldError
-				}
-			} else {
-				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-				offset += l
-				if err != nil {
-					goto SkipFieldError
-				}
-			}
-		default:
-			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-			offset += l
-			if err != nil {
-				goto SkipFieldError
-			}
-		}
-	}
-
-	return offset, nil
-ReadFieldBeginError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
-ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockServiceGetMarketSectorsArgs[fieldId]), err)
-SkipFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
-}
-
-func (p *StockServiceGetMarketSectorsArgs) FastReadField1(buf []byte) (int, error) {
-	offset := 0
-	_field := NewGetMarketSectorsRequest()
-	if l, err := _field.FastRead(buf[offset:]); err != nil {
-		return offset, err
-	} else {
-		offset += l
-	}
-	p.Req = _field
-	return offset, nil
-}
-
-func (p *StockServiceGetMarketSectorsArgs) FastWrite(buf []byte) int {
-	return p.FastWriteNocopy(buf, nil)
-}
-
-func (p *StockServiceGetMarketSectorsArgs) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	if p != nil {
-		offset += p.fastWriteField1(buf[offset:], w)
-	}
-	offset += thrift.Binary.WriteFieldStop(buf[offset:])
-	return offset
-}
-
-func (p *StockServiceGetMarketSectorsArgs) BLength() int {
-	l := 0
-	if p != nil {
-		l += p.field1Length()
-	}
-	l += thrift.Binary.FieldStopLength()
-	return l
-}
-
-func (p *StockServiceGetMarketSectorsArgs) fastWriteField1(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 1)
-	offset += p.Req.FastWriteNocopy(buf[offset:], w)
-	return offset
-}
-
-func (p *StockServiceGetMarketSectorsArgs) field1Length() int {
-	l := 0
-	l += thrift.Binary.FieldBeginLength()
-	l += p.Req.BLength()
-	return l
-}
-
-func (p *StockServiceGetMarketSectorsArgs) DeepCopy(s interface{}) error {
-	src, ok := s.(*StockServiceGetMarketSectorsArgs)
-	if !ok {
-		return fmt.Errorf("%T's type not matched %T", s, p)
-	}
-
-	var _req *GetMarketSectorsRequest
-	if src.Req != nil {
-		_req = &GetMarketSectorsRequest{}
-		if err := _req.DeepCopy(src.Req); err != nil {
-			return err
-		}
-	}
-	p.Req = _req
-
-	return nil
-}
-
-func (p *StockServiceGetMarketSectorsResult) FastRead(buf []byte) (int, error) {
-
-	var err error
-	var offset int
-	var l int
-	var fieldTypeId thrift.TType
-	var fieldId int16
-	for {
-		fieldTypeId, fieldId, l, err = thrift.Binary.ReadFieldBegin(buf[offset:])
-		offset += l
-		if err != nil {
-			goto ReadFieldBeginError
-		}
-		if fieldTypeId == thrift.STOP {
-			break
-		}
-		switch fieldId {
-		case 0:
-			if fieldTypeId == thrift.STRUCT {
-				l, err = p.FastReadField0(buf[offset:])
-				offset += l
-				if err != nil {
-					goto ReadFieldError
-				}
-			} else {
-				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-				offset += l
-				if err != nil {
-					goto SkipFieldError
-				}
-			}
-		default:
-			l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-			offset += l
-			if err != nil {
-				goto SkipFieldError
-			}
-		}
-	}
-
-	return offset, nil
-ReadFieldBeginError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
-ReadFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockServiceGetMarketSectorsResult[fieldId]), err)
-SkipFieldError:
-	return offset, thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
-}
-
-func (p *StockServiceGetMarketSectorsResult) FastReadField0(buf []byte) (int, error) {
-	offset := 0
-	_field := NewGetMarketSectorsResponse()
-	if l, err := _field.FastRead(buf[offset:]); err != nil {
-		return offset, err
-	} else {
-		offset += l
-	}
-	p.Success = _field
-	return offset, nil
-}
-
-func (p *StockServiceGetMarketSectorsResult) FastWrite(buf []byte) int {
-	return p.FastWriteNocopy(buf, nil)
-}
-
-func (p *StockServiceGetMarketSectorsResult) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	if p != nil {
-		offset += p.fastWriteField0(buf[offset:], w)
-	}
-	offset += thrift.Binary.WriteFieldStop(buf[offset:])
-	return offset
-}
-
-func (p *StockServiceGetMarketSectorsResult) BLength() int {
-	l := 0
-	if p != nil {
-		l += p.field0Length()
-	}
-	l += thrift.Binary.FieldStopLength()
-	return l
-}
-
-func (p *StockServiceGetMarketSectorsResult) fastWriteField0(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	if p.IsSetSuccess() {
-		offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRUCT, 0)
-		offset += p.Success.FastWriteNocopy(buf[offset:], w)
-	}
-	return offset
-}
-
-func (p *StockServiceGetMarketSectorsResult) field0Length() int {
-	l := 0
-	if p.IsSetSuccess() {
-		l += thrift.Binary.FieldBeginLength()
-		l += p.Success.BLength()
-	}
-	return l
-}
-
-func (p *StockServiceGetMarketSectorsResult) DeepCopy(s interface{}) error {
-	src, ok := s.(*StockServiceGetMarketSectorsResult)
-	if !ok {
-		return fmt.Errorf("%T's type not matched %T", s, p)
-	}
-
-	var _success *GetMarketSectorsResponse
-	if src.Success != nil {
-		_success = &GetMarketSectorsResponse{}
+		_success = &GetFinancialReportResponse{}
 		if err := _success.DeepCopy(src.Success); err != nil {
 			return err
 		}
@@ -2158,18 +1669,10 @@ func (p *StockServiceGetRealtimeResult) GetResult() interface{} {
 	return p.Success
 }
 
-func (p *StockServiceGetMarketSummaryArgs) GetFirstArgument() interface{} {
+func (p *StockServiceGetFinancialReportArgs) GetFirstArgument() interface{} {
 	return p.Req
 }
 
-func (p *StockServiceGetMarketSummaryResult) GetResult() interface{} {
-	return p.Success
-}
-
-func (p *StockServiceGetMarketSectorsArgs) GetFirstArgument() interface{} {
-	return p.Req
-}
-
-func (p *StockServiceGetMarketSectorsResult) GetResult() interface{} {
+func (p *StockServiceGetFinancialReportResult) GetResult() interface{} {
 	return p.Success
 }

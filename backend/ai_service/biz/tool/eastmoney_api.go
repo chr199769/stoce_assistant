@@ -179,7 +179,38 @@ type NoticeResponse struct {
 	} `json:"data"`
 }
 
-// --- Fetch Functions ---
+// KLineResponse matches EastMoney K-line interface
+type KLineResponse struct {
+	Data struct {
+		Code   string   `json:"code"`
+		Name   string   `json:"name"`
+		KLines []string `json:"klines"` // Format: "2024-05-15,10.00,-1.5" (Date, Close, ChangePct)
+	} `json:"data"`
+}
+
+// GetKLineData fetches historical K-line data
+// codeOrSecId: stock code or secid
+// days: number of days
+func GetKLineData(codeOrSecId string, days int) ([]string, error) {
+	secId := codeOrSecId
+	if !strings.Contains(codeOrSecId, ".") {
+		secId = getSecId(codeOrSecId)
+	}
+
+	// fields2: f51=Date, f53=Close, f59=ChangePercent
+	url := fmt.Sprintf("http://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s&fields1=f1&fields2=f51,f53,f59&klt=101&fqt=1&end=20500101&lmt=%d", secId, days)
+
+	var resp KLineResponse
+	if err := fetchJSON(url, &resp); err != nil {
+		return nil, err
+	}
+	if resp.Data.KLines == nil {
+		return nil, fmt.Errorf("no kline data")
+	}
+
+	return resp.Data.KLines, nil
+}
+
 
 // GetDragonTigerStatus checks if a stock is on the latest Dragon & Tiger list
 func GetDragonTigerStatus(code string) (bool, string, error) {

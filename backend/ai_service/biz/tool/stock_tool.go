@@ -152,11 +152,17 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 		log.Printf("Error fetching notices: %v", err)
 	}
 
+	// 8. Quantitative Risk Control (Severe Abnormal Fluctuation)
+	riskCheck := CheckRiskControlRules(input)
+
 	// Format output
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Analysis for %s:\n", input))
 
-	sb.WriteString("\n[Industry Info]\n")
+	sb.WriteString("\n[Quantitative Risk Check]\n")
+	sb.WriteString(riskCheck)
+
+	sb.WriteString("\n\n[Industry Info]\n")
 	sb.WriteString(industry)
 
 	sb.WriteString("\n\n[Order Book (Intraday)]\n")

@@ -3,10 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "android": "node -r ./polyfill.js node_modules/react-native/cli.js run-android",
+    "ios": "node -r ./polyfill.js node_modules/react-native/cli.js run-ios",
     "lint": "eslint .",
-    "start": "react-native start",
+    "start": "node -r ./polyfill.js node_modules/react-native/cli.js start",
     "test": "jest"
   },
   "dependencies": {

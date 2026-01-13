@@ -39,8 +39,26 @@ struct ImageRecognitionResponse {
     1: list<RecognizedStock> stocks
 }
 
+struct FinancialData {
+    1: string report_date
+    2: double total_revenue
+    3: double net_profit
+    4: double eps
+    5: double revenue_yoy
+    6: double profit_yoy
+}
+
+struct GetFinancialReportRequest {
+    1: string code (api.path="code")
+}
+
+struct GetFinancialReportResponse {
+    1: list<FinancialData> reports
+}
+
 service StockAPI {
     RealtimeResponse GetRealtime(1: GetRealtimeRequest req) (api.get="/api/stocks/:code/realtime")
     PredictionResponse GetPrediction(1: PredictionRequest req) (api.post="/api/prediction/:code")
     ImageRecognitionResponse RecognizeStockImage(1: ImageRecognitionRequest req) (api.post="/api/image/recognize")
+    GetFinancialReportResponse GetFinancialReport(1: GetFinancialReportRequest req) (api.get="/api/stocks/:code/financial")
 }

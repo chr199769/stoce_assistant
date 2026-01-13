@@ -20,17 +20,10 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
-	"GetMarketSummary": kitex.NewMethodInfo(
-		getMarketSummaryHandler,
-		newStockServiceGetMarketSummaryArgs,
-		newStockServiceGetMarketSummaryResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"GetMarketSectors": kitex.NewMethodInfo(
-		getMarketSectorsHandler,
-		newStockServiceGetMarketSectorsArgs,
-		newStockServiceGetMarketSectorsResult,
+	"GetFinancialReport": kitex.NewMethodInfo(
+		getFinancialReportHandler,
+		newStockServiceGetFinancialReportArgs,
+		newStockServiceGetFinancialReportResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
@@ -118,40 +111,22 @@ func newStockServiceGetRealtimeResult() interface{} {
 	return stock.NewStockServiceGetRealtimeResult()
 }
 
-func getMarketSummaryHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*stock.StockServiceGetMarketSummaryArgs)
-	realResult := result.(*stock.StockServiceGetMarketSummaryResult)
-	success, err := handler.(stock.StockService).GetMarketSummary(ctx, realArg.Req)
+func getFinancialReportHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*stock.StockServiceGetFinancialReportArgs)
+	realResult := result.(*stock.StockServiceGetFinancialReportResult)
+	success, err := handler.(stock.StockService).GetFinancialReport(ctx, realArg.Req)
 	if err != nil {
 		return err
 	}
 	realResult.Success = success
 	return nil
 }
-func newStockServiceGetMarketSummaryArgs() interface{} {
-	return stock.NewStockServiceGetMarketSummaryArgs()
+func newStockServiceGetFinancialReportArgs() interface{} {
+	return stock.NewStockServiceGetFinancialReportArgs()
 }
 
-func newStockServiceGetMarketSummaryResult() interface{} {
-	return stock.NewStockServiceGetMarketSummaryResult()
-}
-
-func getMarketSectorsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*stock.StockServiceGetMarketSectorsArgs)
-	realResult := result.(*stock.StockServiceGetMarketSectorsResult)
-	success, err := handler.(stock.StockService).GetMarketSectors(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newStockServiceGetMarketSectorsArgs() interface{} {
-	return stock.NewStockServiceGetMarketSectorsArgs()
-}
-
-func newStockServiceGetMarketSectorsResult() interface{} {
-	return stock.NewStockServiceGetMarketSectorsResult()
+func newStockServiceGetFinancialReportResult() interface{} {
+	return stock.NewStockServiceGetFinancialReportResult()
 }
 
 type kClient struct {
@@ -174,21 +149,11 @@ func (p *kClient) GetRealtime(ctx context.Context, req *stock.GetRealtimeRequest
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) GetMarketSummary(ctx context.Context, req *stock.GetMarketSummaryRequest) (r *stock.GetMarketSummaryResponse, err error) {
-	var _args stock.StockServiceGetMarketSummaryArgs
+func (p *kClient) GetFinancialReport(ctx context.Context, req *stock.GetFinancialReportRequest) (r *stock.GetFinancialReportResponse, err error) {
+	var _args stock.StockServiceGetFinancialReportArgs
 	_args.Req = req
-	var _result stock.StockServiceGetMarketSummaryResult
-	if err = p.c.Call(ctx, "GetMarketSummary", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest) (r *stock.GetMarketSectorsResponse, err error) {
-	var _args stock.StockServiceGetMarketSectorsArgs
-	_args.Req = req
-	var _result stock.StockServiceGetMarketSectorsResult
-	if err = p.c.Call(ctx, "GetMarketSectors", &_args, &_result); err != nil {
+	var _result stock.StockServiceGetFinancialReportResult
+	if err = p.c.Call(ctx, "GetFinancialReport", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

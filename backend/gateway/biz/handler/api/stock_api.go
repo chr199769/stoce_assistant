@@ -51,6 +51,47 @@ func GetRealtime(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
+// GetFinancialReport .
+// @router /api/stocks/:code/financial [GET]
+func GetFinancialReport(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetFinancialReportRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Call Stock Service
+	rpcReq := &stock.GetFinancialReportRequest{
+		Code: req.Code,
+	}
+	rpcResp, err := rpc.StockClient.GetFinancialReport(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Map response
+	resp := &api.GetFinancialReportResponse{
+		Reports: make([]*api.FinancialData, 0),
+	}
+	if rpcResp.Reports != nil {
+		for _, r := range rpcResp.Reports {
+			resp.Reports = append(resp.Reports, &api.FinancialData{
+				ReportDate:   r.ReportDate,
+				TotalRevenue: r.TotalRevenue,
+				NetProfit:    r.NetProfit,
+				Eps:          r.Eps,
+				RevenueYoy:   r.RevenueYoy,
+				ProfitYoy:    r.ProfitYoy,
+			})
+		}
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
 // GetPrediction .
 // @router /api/prediction/:code [POST]
 func GetPrediction(ctx context.Context, c *app.RequestContext) {

@@ -31,6 +31,7 @@ func Register(r *server.Hertz) {
 			_stocks := _api.Group("/stocks", _stocksMw()...)
 			{
 				_code := _stocks.Group("/:code", _codeMw()...)
+				_code.GET("/financial", append(_getfinancialreportMw(), api.GetFinancialReport)...)
 				_code.GET("/realtime", append(_getrealtimeMw(), api.GetRealtime)...)
 			}
 		}

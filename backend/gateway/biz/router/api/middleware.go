@@ -50,3 +50,8 @@ func _recognizestockimageMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getfinancialreportMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

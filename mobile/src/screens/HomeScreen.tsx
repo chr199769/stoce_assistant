@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert, SafeAreaView, Platform, StatusBar } from 'react-native';
-import { Card, Text, FAB, Dialog, Portal, TextInput, Button } from 'react-native-paper';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { Card, Text, FAB, Dialog, Portal, TextInput, Button, IconButton } from 'react-native-paper';
 import { getRealtime, recognizeStockImage } from '../api/stock';
 import { RealtimeResponse } from '../types';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
 
@@ -85,9 +85,15 @@ const HomeScreen = () => {
     }
   };
 
-  useEffect(() => {
-    fetchStocks();
-  }, [watchlist]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchStocks();
+      const interval = setInterval(() => {
+        fetchStocks(true);
+      }, 3000);
+      return () => clearInterval(interval);
+    }, [watchlist])
+  );
 
   const showDialog = () => setVisible(true);
   const hideDialog = () => setVisible(false);
@@ -101,6 +107,24 @@ const HomeScreen = () => {
       setNewCode('');
       hideDialog();
     }
+  };
+
+  const removeStock = (code: string) => {
+    Alert.alert(
+      '删除股票',
+      '确定要删除这只股票吗？',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => {
+            const newList = watchlist.filter(item => item !== code);
+            saveWatchlist(newList);
+          },
+        },
+      ]
+    );
   };
 
   const handleImageImport = async () => {
@@ -157,7 +181,6 @@ const HomeScreen = () => {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchStocks} />}
       >
         {stocks.map((stock) => (
           <Card key={stock.code} style={styles.card} onPress={() => {
@@ -165,19 +188,30 @@ const HomeScreen = () => {
             // @ts-ignore
             navigation.navigate('Prediction', { code: stock.code });
           }}>
-            <Card.Content>
+            <Card.Content style={styles.cardContent}>
               <View style={styles.row}>
                 <View>
                   <Text variant="titleMedium" style={styles.stockName}>{stock.name}</Text>
                   <Text variant="bodySmall" style={styles.stockCode}>{stock.code}</Text>
                 </View>
-                <View style={styles.priceContainer}>
-                  <Text variant="titleLarge" style={{ color: getColor(stock.change_percent), fontWeight: 'bold' }}>
-                    {stock.current_price.toFixed(2)}
-                  </Text>
-                  <Text variant="bodyMedium" style={{ color: getColor(stock.change_percent) }}>
-                    {stock.change_percent > 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%
-                  </Text>
+                <View style={styles.rightGroup}>
+                  <View style={styles.priceContainer}>
+                    <Text variant="titleMedium" style={[styles.priceText, { color: getColor(stock.change_percent) }]}>
+                      {stock.current_price.toFixed(2)}
+                    </Text>
+                    <Text variant="bodyMedium" style={[styles.percentText, { color: getColor(stock.change_percent) }]}>
+                      {stock.change_percent > 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%
+                    </Text>
+                  </View>
+                  <Button
+                    icon="delete-outline"
+                    mode="text"
+                    compact
+                    textColor="#757575"
+                    onPress={() => removeStock(stock.code)}
+                  >
+                    删除
+                  </Button>
                 </View>
               </View>
             </Card.Content>
@@ -243,14 +277,21 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   card: {
-    marginBottom: 12,
+    marginBottom: 8,
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
     elevation: 2,
   },
+  cardContent: {
+    paddingVertical: 8,
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rightGroup: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   stockName: {
@@ -261,7 +302,14 @@ const styles = StyleSheet.create({
     color: '#757575',
   },
   priceContainer: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priceText: {
+    fontWeight: 'bold',
+  },
+  percentText: {
+    marginLeft: 8,
   },
   fab: {
     position: 'absolute',
