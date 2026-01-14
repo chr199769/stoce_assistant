@@ -7,7 +7,8 @@ import (
 	"path/filepath"
 	"stock_assistant/backend/ai_service/biz/provider/llm"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
-	"stock_assistant/backend/stock_service/kitex_gen/stock/stockservice"
+	"stock_assistant/backend/ai_service/kitex_gen/stock"
+	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 
 	"github.com/cloudwego/kitex/client"
 )
@@ -15,6 +16,7 @@ import (
 // AIServiceImpl implements the last service interface defined in the IDL.
 type AIServiceImpl struct {
 	llmProvider llm.Provider
+	stockClient stockservice.Client
 }
 
 func NewAIServiceImpl() *AIServiceImpl {
@@ -61,6 +63,7 @@ func NewAIServiceImpl() *AIServiceImpl {
 
 	return &AIServiceImpl{
 		llmProvider: p,
+		stockClient: c,
 	}
 }
 
@@ -96,4 +99,39 @@ func (s *AIServiceImpl) ImageRecognition(ctx context.Context, req *ai.ImageRecog
 	return &ai.ImageRecognitionResponse{
 		Stocks: stocks,
 	}, nil
+}
+
+// MarketReview implements the AIServiceImpl interface.
+func (s *AIServiceImpl) MarketReview(ctx context.Context, req *ai.MarketReviewRequest) (resp *ai.MarketReviewResponse, err error) {
+	log.Printf("Received market review request: Date=%s", req.Date)
+
+	// 1. Fetch Sector Data
+	sectorReq := &stock.GetMarketSectorsRequest{
+		Type:  "concept",
+		Limit: 20,
+	}
+	sectorResp, err := s.stockClient.GetMarketSectors(ctx, sectorReq)
+	if err != nil {
+		log.Printf("Failed to get market sectors: %v", err)
+		return nil, err
+	}
+
+	// 2. Fetch Limit Up Data
+	limitUpReq := &stock.GetLimitUpPoolRequest{
+		Date: req.Date,
+	}
+	limitUpResp, err := s.stockClient.GetLimitUpPool(ctx, limitUpReq)
+	if err != nil {
+		log.Printf("Failed to get limit up pool: %v", err)
+		return nil, err
+	}
+
+	// 3. Call LLM Provider
+	review, err := s.llmProvider.ReviewMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, req.Date)
+	if err != nil {
+		log.Printf("Failed to generate market review: %v", err)
+		return nil, err
+	}
+
+	return review, nil
 }

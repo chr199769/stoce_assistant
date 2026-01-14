@@ -195,3 +195,35 @@ func RecognizeStockImage(ctx context.Context, c *app.RequestContext) {
 
 	c.JSON(consts.StatusOK, resp)
 }
+
+// MarketReview .
+// @router /api/market/review [POST]
+func MarketReview(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.MarketReviewRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Call AI Service
+	rpcReq := &ai.MarketReviewRequest{
+		Date:         req.Date,
+		FocusSectors: req.FocusSectors,
+	}
+
+	rpcResp, err := rpc.AIClient.MarketReview(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.MarketReviewResponse{
+		Summary:    rpcResp.Summary,
+		Confidence: 0.85, // Mock confidence as it's not in rpcResp yet
+		Date:       req.Date, // Echo date
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}

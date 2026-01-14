@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
-import { Appbar, Card, Text, Divider, Chip } from 'react-native-paper';
-import { getRealtime } from '../api/stock';
-import { RealtimeResponse } from '../types';
+import { Appbar, Card, Text, Divider, Chip, Button, ActivityIndicator } from 'react-native-paper';
+import { getRealtime, marketReview } from '../api/stock';
+import { RealtimeResponse, MarketReviewResponse } from '../types';
 import { PieChart } from 'react-native-chart-kit';
 
 const SummaryScreen = () => {
   const [indices, setIndices] = useState<RealtimeResponse[]>([]);
   const [loading, setLoading] = useState(false);
+  const [review, setReview] = useState<MarketReviewResponse | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   // Mock sector data
   const sectorData = [
@@ -33,8 +35,22 @@ const SummaryScreen = () => {
     }
   };
 
+  const fetchReview = async () => {
+    setReviewLoading(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const res = await marketReview({ date: today });
+      setReview(res);
+    } catch (error) {
+      console.error("Failed to fetch market review:", error);
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchIndices();
+    fetchReview();
   }, []);
 
   const getColor = (change: number) => {
@@ -66,6 +82,28 @@ const SummaryScreen = () => {
             </Card>
           ))}
         </View>
+
+        <Divider style={styles.divider} />
+
+        <Text variant="titleMedium" style={styles.sectionTitle}>AI 市场复盘</Text>
+        <Card style={styles.reviewCard}>
+          <Card.Content>
+            {reviewLoading ? (
+              <ActivityIndicator animating={true} color="#1E88E5" />
+            ) : review ? (
+              <>
+                <Text variant="bodyMedium" style={styles.reviewText}>{review.summary}</Text>
+                <View style={styles.confidenceContainer}>
+                  <Text variant="bodySmall" style={styles.confidenceLabel}>置信度:</Text>
+                  <Text variant="bodySmall" style={styles.confidenceValue}>{(review.confidence * 100).toFixed(0)}%</Text>
+                </View>
+                <Text variant="bodySmall" style={styles.dateText}>日期: {review.date}</Text>
+              </>
+            ) : (
+              <Button mode="outlined" onPress={fetchReview}>加载复盘</Button>
+            )}
+          </Card.Content>
+        </Card>
 
         <Divider style={styles.divider} />
 
@@ -137,6 +175,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
     paddingVertical: 8,
+  },
+  reviewCard: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 8,
+  },
+  reviewText: {
+    lineHeight: 24,
+    color: '#333',
+    marginBottom: 8,
+  },
+  confidenceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  confidenceLabel: {
+    color: '#666',
+    marginRight: 4,
+  },
+  confidenceValue: {
+    color: '#1E88E5',
+    fontWeight: 'bold',
+  },
+  dateText: {
+    color: '#999',
+    marginTop: 4,
+    textAlign: 'right',
   },
   divider: {
     marginVertical: 16,

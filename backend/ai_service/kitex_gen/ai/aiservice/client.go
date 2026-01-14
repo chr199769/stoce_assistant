@@ -3,9 +3,9 @@
 package aiservice
 
 import (
-	"context"
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
+	"context"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
 )
 
@@ -13,12 +13,14 @@ import (
 type Client interface {
 	GetPrediction(ctx context.Context, req *ai.GetPredictionRequest, callOptions ...callopt.Option) (r *ai.GetPredictionResponse, err error)
 	ImageRecognition(ctx context.Context, req *ai.ImageRecognitionRequest, callOptions ...callopt.Option) (r *ai.ImageRecognitionResponse, err error)
+	MarketReview(ctx context.Context, req *ai.MarketReviewRequest, callOptions ...callopt.Option) (r *ai.MarketReviewResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
 func NewClient(destService string, opts ...client.Option) (Client, error) {
 	var options []client.Option
 	options = append(options, client.WithDestService(destService))
+
 
 	options = append(options, opts...)
 
@@ -52,4 +54,37 @@ func (p *kAIServiceClient) GetPrediction(ctx context.Context, req *ai.GetPredict
 func (p *kAIServiceClient) ImageRecognition(ctx context.Context, req *ai.ImageRecognitionRequest, callOptions ...callopt.Option) (r *ai.ImageRecognitionResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ImageRecognition(ctx, req)
+}
+
+func (p *kAIServiceClient) MarketReview(ctx context.Context, req *ai.MarketReviewRequest, callOptions ...callopt.Option) (r *ai.MarketReviewResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.MarketReview(ctx, req)
+}
+
+// NewClientWithBytedConfig creates a client for the service defined in IDL.
+func NewClientWithBytedConfig(destService string, config interface{}, opts ...client.Option) (Client, error) {
+	if config == nil {
+	}
+
+	var options []client.Option
+	options = append(options, client.WithDestService(destService))
+
+	clientServiceInfo := serviceInfoForClient()
+	options = append(options, opts...)
+	kc, err := client.NewClient(clientServiceInfo, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &kAIServiceClient{
+		kClient: newServiceClient(kc),
+	}, nil
+}
+
+// MustNewClientWithBytedConfig creates a client for the service defined in IDL. It panics if any error occurs.
+func MustNewClientWithBytedConfig(destService string, config interface{}, opts ...client.Option) Client {
+	kc, err := NewClientWithBytedConfig(destService, config, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return kc
 }

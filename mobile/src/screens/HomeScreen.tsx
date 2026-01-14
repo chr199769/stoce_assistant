@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { Card, Text, FAB, Dialog, Portal, TextInput, Button, IconButton } from 'react-native-paper';
 import { getRealtime, recognizeStockImage } from '../api/stock';
@@ -15,9 +15,15 @@ const HomeScreen = () => {
   const [visible, setVisible] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [watchlist, setWatchlist] = useState<string[]>([]);
+  const watchlistRef = useRef<string[]>([]);
   const [fabOpen, setFabOpen] = useState(false);
 
   const navigation = useNavigation();
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    watchlistRef.current = watchlist;
+  }, [watchlist]);
 
   // Load watchlist on mount
   useEffect(() => {
@@ -28,10 +34,20 @@ const HomeScreen = () => {
     try {
       const stored = await AsyncStorage.getItem(WATCHLIST_KEY);
       if (stored) {
-        // De-duplicate on load
         const list = JSON.parse(stored);
-        const uniqueList = Array.from(new Set(list)) as string[];
-        setWatchlist(uniqueList);
+        // Clean up data: trim whitespace, convert to lowercase, and de-duplicate
+        const cleanList = Array.from(new Set(
+          list.map((item: string) => item.trim().toLowerCase())
+        )) as string[];
+
+        // Filter out empty strings
+        const validList = cleanList.filter(item => item.length > 0);
+
+        setWatchlist(validList);
+        // Save cleaned list back to storage if it changed
+        if (JSON.stringify(list) !== JSON.stringify(validList)) {
+          saveWatchlist(validList);
+        }
       } else {
         // Default stocks
         const defaults = ['sh600519', 'sz000001', 'sh000001'];
@@ -53,7 +69,10 @@ const HomeScreen = () => {
   };
 
   const fetchStocks = async () => {
-    if (watchlist.length === 0) return;
+    if (watchlist.length === 0) {
+      setStocks([]);
+      return;
+    }
     setLoading(true);
     try {
       const promises = watchlist.map(code => getRealtime(code));
@@ -63,13 +82,21 @@ const HomeScreen = () => {
       const validStocks: RealtimeResponse[] = [];
       const seenCodes = new Set<string>();
 
+      // Get the latest watchlist from ref to avoid race conditions with delete operations
+      const currentWatchlistSet = new Set(watchlistRef.current.map(c => c.trim().toLowerCase()));
+
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           const stock = result.value;
-          // De-duplicate stocks based on code
-          if (!seenCodes.has(stock.code)) {
-            seenCodes.add(stock.code);
-            validStocks.push(stock);
+          const stockCode = stock.code.trim().toLowerCase();
+
+          // Only add if it's still in the watchlist
+          if (currentWatchlistSet.has(stockCode)) {
+            // De-duplicate stocks based on code
+            if (!seenCodes.has(stockCode)) {
+              seenCodes.add(stockCode);
+              validStocks.push(stock);
+            }
           }
         } else {
           console.error(`Failed to fetch stock ${watchlist[index]}:`, result.reason);
@@ -85,11 +112,27 @@ const HomeScreen = () => {
     }
   };
 
+  const isMarketOpen = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+
+    // Weekend check (0 is Sunday, 6 is Saturday)
+    if (day === 0 || day === 6) return false;
+
+    // Time check: 09:15 - 11:30, 13:00 - 15:05
+    const time = hour * 100 + minute;
+    return (time >= 915 && time <= 1130) || (time >= 1300 && time <= 1505);
+  };
+
   useFocusEffect(
     useCallback(() => {
       fetchStocks();
       const interval = setInterval(() => {
-        fetchStocks(true);
+        if (isMarketOpen()) {
+          fetchStocks();
+        }
       }, 3000);
       return () => clearInterval(interval);
     }, [watchlist])
@@ -100,8 +143,9 @@ const HomeScreen = () => {
 
   const addStock = () => {
     if (newCode) {
-      if (!watchlist.includes(newCode)) {
-        const newList = [...watchlist, newCode];
+      const code = newCode.trim().toLowerCase();
+      if (code && !watchlist.includes(code)) {
+        const newList = [...watchlist, code];
         saveWatchlist(newList);
       }
       setNewCode('');
@@ -119,8 +163,12 @@ const HomeScreen = () => {
           text: '删除',
           style: 'destructive',
           onPress: () => {
-            const newList = watchlist.filter(item => item !== code);
+            // Trim and lowercase for robust comparison
+            const targetCode = code.trim().toLowerCase();
+            const newList = watchlist.filter(item => item.trim().toLowerCase() !== targetCode);
             saveWatchlist(newList);
+            // Optimistically update stocks state to remove the item immediately
+            setStocks(prev => prev.filter(s => s.code !== code));
           },
         },
       ]
@@ -145,7 +193,7 @@ const HomeScreen = () => {
       try {
         const response = await recognizeStockImage(asset.uri!, asset.type!, asset.fileName!);
         if (response.stocks.length > 0) {
-          const newCodes = response.stocks.map(s => s.code).filter(c => !watchlist.includes(c));
+          const newCodes = response.stocks.map(s => s.code.trim().toLowerCase()).filter(c => !watchlist.includes(c));
           if (newCodes.length > 0) {
             const newList = [...watchlist, ...newCodes];
             saveWatchlist(newList);
@@ -156,8 +204,9 @@ const HomeScreen = () => {
         } else {
           Alert.alert('提示', '未识别到股票信息');
         }
-      } catch (e) {
-        Alert.alert('错误', '图片识别失败');
+      } catch (e: any) {
+        const errorMessage = e.response?.data || e.message || '图片识别失败';
+        Alert.alert('错误', `图片识别失败: ${errorMessage}`);
         console.error(e);
       } finally {
         setLoading(false);

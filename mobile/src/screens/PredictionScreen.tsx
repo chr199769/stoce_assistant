@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Appbar, TextInput, Button, Card, Text, ProgressBar, HelperText, Chip } from 'react-native-paper';
 import { getPrediction } from '../api/stock';
 import { PredictionResponse } from '../types';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 
 const PredictionScreen = () => {
   const [code, setCode] = useState('');
@@ -12,6 +12,7 @@ const PredictionScreen = () => {
   const [error, setError] = useState('');
 
   const route = useRoute();
+  const navigation = useNavigation();
 
   useEffect(() => {
     // @ts-ignore
@@ -47,6 +48,7 @@ const PredictionScreen = () => {
   return (
     <View style={styles.container}>
       <Appbar.Header style={styles.header}>
+        <Appbar.BackAction onPress={() => navigation.goBack()} color="#FFFFFF" />
         <Appbar.Content title="个股预测" titleStyle={styles.headerTitle} />
       </Appbar.Header>
 

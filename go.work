@@ -1,7 +1,8 @@
 go 1.24.11
 
 use (
-    ./backend/gateway
-    ./backend/stock_service
-    ./backend/ai_service
+	./backend/ai_service
+	./backend/gateway
+	./backend/stock_service
+	./backend/verify_client
 )

@@ -55,3 +55,13 @@ func _getfinancialreportMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _marketMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _marketreviewMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

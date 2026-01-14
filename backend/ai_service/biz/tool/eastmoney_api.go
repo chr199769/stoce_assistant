@@ -1,6 +1,11 @@
 package tool
 
 import (
+	"bytes"
+	"compress/flate"
+	"compress/gzip"
+	"compress/zlib"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -81,7 +86,7 @@ type StockHeatResponse struct {
 	} `json:"data"`
 }
 
-// DragonTigerHistoryResponse matches RPT_LHB_INDIVIDUAL interface
+// DragonTigerHistoryResponse matches RPT_DAILYBILLBOARD_DETAILS interface
 type DragonTigerHistoryResponse struct {
 	Success bool `json:"success"`
 	Result  struct {
@@ -153,18 +158,6 @@ type IndustryResponse struct {
 	} `json:"data"`
 }
 
-// NorthboundResponse matches http://push2.eastmoney.com/api/qt/kamt/get
-type NorthboundResponse struct {
-	Data struct {
-		HK2SH struct {
-			DayNetAmtIn float64 `json:"f52"`
-		} `json:"hk2sh"`
-		HK2SZ struct {
-			DayNetAmtIn float64 `json:"f52"`
-		} `json:"hk2sz"`
-	} `json:"data"`
-}
-
 // NoticeResponse matches https://np-anotice-stock.eastmoney.com/api/security/ann
 type NoticeResponse struct {
 	Data struct {
@@ -197,8 +190,9 @@ func GetKLineData(codeOrSecId string, days int) ([]string, error) {
 		secId = getSecId(codeOrSecId)
 	}
 
-	// fields2: f51=Date, f53=Close, f59=ChangePercent
-	url := fmt.Sprintf("http://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s&fields1=f1&fields2=f51,f53,f59&klt=101&fqt=1&end=20500101&lmt=%d", secId, days)
+	// fields2: f51=Date, f53=Close, f56=Volume, f59=ChangePercent
+	// Note: API returns fields sorted by ID: f51, f53, f56, f59
+	url := fmt.Sprintf("http://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s&fields1=f1&fields2=f51,f53,f56,f59&klt=101&fqt=1&end=20500101&lmt=%d", secId, days)
 
 	var resp KLineResponse
 	if err := fetchJSON(url, &resp); err != nil {
@@ -210,7 +204,6 @@ func GetKLineData(codeOrSecId string, days int) ([]string, error) {
 
 	return resp.Data.KLines, nil
 }
-
 
 // GetDragonTigerStatus checks if a stock is on the latest Dragon & Tiger list
 func GetDragonTigerStatus(code string) (bool, string, error) {
@@ -265,27 +258,109 @@ func GetStockNews(code string) ([]string, error) {
 
 // --- New Fetch Functions for Alpha Signals ---
 
-// GetNorthboundFunds fetches the real-time Northbound funds inflow
-func GetNorthboundFunds() (string, error) {
-	// f52 is Net Inflow
-	url := "http://push2.eastmoney.com/api/qt/kamt/get?fields1=f1,f2,f3,f4&fields2=f51,f52,f53,f54"
-
-	var resp NorthboundResponse
-	if err := fetchJSON(url, &resp); err != nil {
-		return "", err
-	}
-
-	shNet := resp.Data.HK2SH.DayNetAmtIn / 10000 // Convert to Wan
-	szNet := resp.Data.HK2SZ.DayNetAmtIn / 10000 // Convert to Wan
-	total := shNet + szNet
-
-	return fmt.Sprintf("Northbound Net Inflow: Total %.0fWan (SH: %.0fWan, SZ: %.0fWan)", total, shNet, szNet), nil
-}
-
 // GetStockHeat fetches the popularity rank of a stock from Eastmoney Guba
 func GetStockHeat(code string) (string, error) {
-	// Stub implementation as the previous API is protected/encrypted
-	return "Stock Heat Data: Unavailable (API Protected)", nil
+	cleanCode := code
+	if len(code) > 6 {
+		cleanCode = code[len(code)-6:]
+	}
+
+	url := "https://gbcdn.dfcfw.com/rank/popularityList.js"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	body := string(bodyBytes)
+
+	// Extract Base64: var popularityList='...'
+	prefix := "var popularityList='"
+	if idx := strings.Index(body, prefix); idx != -1 {
+		body = body[idx+len(prefix):]
+	}
+	if idx := strings.LastIndex(body, "'"); idx != -1 {
+		body = body[:idx]
+	}
+
+	// Decode Base64
+	decoded, err := base64.StdEncoding.DecodeString(body)
+	if err != nil {
+		return "", fmt.Errorf("base64 decode failed: %v", err)
+	}
+
+	// Decompress (Try Zlib then Flate)
+	var jsonData []byte
+
+	// Try Zlib
+	r, err := zlib.NewReader(bytes.NewReader(decoded))
+	if err == nil {
+		jsonData, _ = io.ReadAll(r)
+		r.Close()
+	}
+
+	// If Zlib failed or returned empty, try Flate
+	if len(jsonData) == 0 {
+		fr := flate.NewReader(bytes.NewReader(decoded))
+		jsonData, _ = io.ReadAll(fr)
+		fr.Close()
+	}
+
+	// If Flate failed, try Gzip
+	if len(jsonData) == 0 {
+		gr, err := gzip.NewReader(bytes.NewReader(decoded))
+		if err == nil {
+			jsonData, _ = io.ReadAll(gr)
+			gr.Close()
+		}
+	}
+
+	if len(jsonData) == 0 {
+		// Log error but return friendly message
+		fmt.Printf("StockHeat decompression failed for %s\n", cleanCode)
+		return "Guba Rank: Data Unavailable (Decompression Error)", nil
+	}
+
+	// Parse JSON
+	// Try parsing as object with "data" field
+	var heatResp StockHeatResponse
+	if err := json.Unmarshal(jsonData, &heatResp); err == nil && len(heatResp.Data) > 0 {
+		for _, item := range heatResp.Data {
+			if item.SecurityCode == cleanCode {
+				return fmt.Sprintf("Guba Rank: %d, Heat: %d", item.Rank, item.Heat), nil
+			}
+		}
+		return "Guba Rank: >100 (Not in Top 100)", nil
+	}
+
+	// Try parsing as array directly
+	var heatList []struct {
+		SecurityCode string `json:"securityCode"`
+		SecurityName string `json:"securityName"`
+		Rank         int    `json:"rank"`
+		Heat         int    `json:"heat"`
+	}
+	if err := json.Unmarshal(jsonData, &heatList); err == nil && len(heatList) > 0 {
+		for _, item := range heatList {
+			if item.SecurityCode == cleanCode {
+				return fmt.Sprintf("Guba Rank: %d, Heat: %d", item.Rank, item.Heat), nil
+			}
+		}
+		return "Guba Rank: >100 (Not in Top 100)", nil
+	}
+
+	return "", fmt.Errorf("failed to parse heat data")
 }
 
 // GetStockNotices fetches official announcements, including inquiries and regulation letters
@@ -356,15 +431,21 @@ func GetDragonTigerHistory(code string, limit int) ([]string, error) {
 
 	// Construct URL: sort by trade date descending, get latest limit records
 	// Use %22 for quotes in filter
-	// Changed RPT_LHB_INDIVIDUAL to RPT_LHB_HISTORYLIST
-	url := fmt.Sprintf("https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LHB_HISTORYLIST&columns=ALL&filter=(SECURITY_CODE=%%22%s%%22)&pageNumber=1&pageSize=%d&sortTypes=-1&sortColumns=TRADE_DATE", cleanCode, limit)
+	// Changed to RPT_DAILYBILLBOARD_DETAILS
+	url := fmt.Sprintf("https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DAILYBILLBOARD_DETAILS&columns=ALL&filter=(SECURITY_CODE=%%22%s%%22)&pageNumber=1&pageSize=%d&sortTypes=-1&sortColumns=TRADE_DATE", cleanCode, limit)
 
 	var resp DragonTigerHistoryResponse
 	if err := fetchJSON(url, &resp); err != nil {
-		return nil, err
+		fmt.Printf("GetDragonTigerHistory failed: %v\n", err)
+		return []string{"LHB History: Data Unavailable (API Error)"}, nil
 	}
 
 	if !resp.Success || len(resp.Result.Data) == 0 {
+		// It might be API error (9501) or just no data
+		if !resp.Success {
+			fmt.Printf("GetDragonTigerHistory API error: %v\n", resp)
+			return []string{"LHB History: Data Unavailable (API Error)"}, nil
+		}
 		return nil, nil // No history
 	}
 
@@ -378,12 +459,98 @@ func GetDragonTigerHistory(code string, limit int) ([]string, error) {
 
 		netBuy := item.BillBoardNetAmt / 10000 // Convert to Wan
 
-		record := fmt.Sprintf("[%s] %s | Change: %.2f%% | NetBuy: %.0fWan | Reason: %s",
-			date, item.SecurityName, item.ChangeRate, netBuy, item.Explain)
+		// Fetch detailed seat info for this day
+		seatInfo := ""
+		buySeats, sellSeats, err := GetDragonTigerSeats(cleanCode, date)
+		if err == nil {
+			seatInfo = fmt.Sprintf("\n  [Top Buy]: %s\n  [Top Sell]: %s",
+				strings.Join(buySeats, ", "),
+				strings.Join(sellSeats, ", "))
+		}
+
+		record := fmt.Sprintf("[%s] %s | Change: %.2f%% | NetBuy: %.0fWan | Reason: %s%s",
+			date, item.SecurityName, item.ChangeRate, netBuy, item.Explain, seatInfo)
 		history = append(history, record)
 	}
 
 	return history, nil
+}
+
+// DragonTigerSeatResponse matches RPT_BILLBOARD_DAILYDETAILSBUY / SELL
+type DragonTigerSeatResponse struct {
+	Success bool `json:"success"`
+	Result  struct {
+		Data []struct {
+			OperatedeptName string  `json:"OPERATEDEPT_NAME"`
+			NetAmt          float64 `json:"NET"`
+			BuyAmt          float64 `json:"BUY"`
+			SellAmt         float64 `json:"SELL"`
+		} `json:"data"`
+	} `json:"result"`
+}
+
+// GetDragonTigerSeats fetches the buy/sell seats for a specific date
+func GetDragonTigerSeats(code, date string) ([]string, []string, error) {
+	// Buy Seats
+	urlBuy := fmt.Sprintf("https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_BILLBOARD_DAILYDETAILSBUY&columns=ALL&filter=(SECURITY_CODE=%%22%s%%22)(TRADE_DATE=%%27%s%%27)", code, date)
+	var respBuy DragonTigerSeatResponse
+	if err := fetchJSON(urlBuy, &respBuy); err != nil {
+		return nil, nil, err
+	}
+
+	// Sell Seats
+	urlSell := fmt.Sprintf("https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_BILLBOARD_DAILYDETAILSSELL&columns=ALL&filter=(SECURITY_CODE=%%22%s%%22)(TRADE_DATE=%%27%s%%27)", code, date)
+	var respSell DragonTigerSeatResponse
+	if err := fetchJSON(urlSell, &respSell); err != nil {
+		return nil, nil, err
+	}
+
+	var buySeats []string
+	for i, item := range respBuy.Result.Data {
+		if i >= 3 {
+			break
+		} // Top 3
+		name := item.OperatedeptName
+		// Tag known hot money
+		if strings.Contains(name, "拉萨") {
+			name += "(拉萨天团)"
+		} else if strings.Contains(name, "溧阳路") {
+			name += "(孙哥)"
+		} else if strings.Contains(name, "益田路") {
+			name += "(校长)"
+		} else if strings.Contains(name, "机构专用") {
+			name = "机构专用"
+		} else if strings.Contains(name, "沪股通") || strings.Contains(name, "深股通") {
+			name = "北向资金"
+		}
+
+		amt := item.NetAmt
+		if amt == 0 {
+			amt = item.BuyAmt
+		} // Fallback
+		buySeats = append(buySeats, fmt.Sprintf("%s(%.0f万)", name, amt/10000))
+	}
+
+	var sellSeats []string
+	for i, item := range respSell.Result.Data {
+		if i >= 3 {
+			break
+		} // Top 3
+		name := item.OperatedeptName
+		if strings.Contains(name, "机构专用") {
+			name = "机构专用"
+		} else if strings.Contains(name, "沪股通") || strings.Contains(name, "深股通") {
+			name = "北向资金"
+		}
+
+		amt := item.NetAmt
+		if amt == 0 {
+			amt = -item.SellAmt
+		} // Fallback, usually net sell is negative
+		sellSeats = append(sellSeats, fmt.Sprintf("%s(%.0f万)", name, amt/10000))
+	}
+
+	return buySeats, sellSeats, nil
 }
 
 // getSecId converts stock code to EastMoney secid format (1.6xxxxx for SH, 0.xxxxxx for SZ/BJ)
@@ -443,7 +610,8 @@ func GetChipDistribution(code string) (string, error) {
 
 	var resp ChipDistributionResponse
 	if err := fetchJSON(url, &resp); err != nil {
-		return "", err
+		fmt.Printf("GetChipDistribution failed: %v\n", err)
+		return "Chip Distribution: Data Unavailable (API Error)", nil
 	}
 
 	if !resp.Success || len(resp.Result.Data) == 0 {
@@ -469,35 +637,62 @@ func GetIndustryIndex(code string) (string, error) {
 		resp.Data.IndustryName, resp.Data.RegionName, resp.Data.ConceptNames), nil
 }
 
-// GetMarketNews fetches general market news (kuaixun)
+// SinaNewsResponse matches Sina 7x24 API
+type SinaNewsResponse struct {
+	Result struct {
+		Status struct {
+			Code int    `json:"code"`
+			Msg  string `json:"msg"`
+		} `json:"status"`
+		Data struct {
+			Feed struct {
+				List []struct {
+					RichText   string `json:"rich_text"`
+					CreateTime string `json:"create_time"`
+					DocUrl     string `json:"doc_url"`
+				} `json:"list"`
+			} `json:"feed"`
+		} `json:"data"`
+	} `json:"result"`
+}
+
+// GetMarketNews fetches general market news (kuaixun) using Sina 7x24 API (more reliable)
 func GetMarketNews() ([]string, error) {
-	// This URL returns a list of news objects
-	url := "https://newsapi.eastmoney.com/kuaixun/v1/getlist_102_0_0_20.html"
+	url := "https://zhibo.sina.com.cn/api/zhibo/feed?page=1&page_size=50&zhibo_id=152"
 
-	// The structure is slightly different for Kuaixun
-	type KuaixunResponse struct {
-		Lives []struct {
-			Title  string `json:"title"`
-			Digest string `json:"digest"`
-			Time   string `json:"showtime"`
-		} `json:"Lives"`
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
 	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36")
 
-	var resp KuaixunResponse
-	if err := fetchJSON(url, &resp); err != nil {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
 
+	var sinaResp SinaNewsResponse
+	if err := json.Unmarshal(body, &sinaResp); err != nil {
+		return nil, fmt.Errorf("json parse error: %v", err)
+	}
+
+	if sinaResp.Result.Status.Code != 0 {
+		return nil, fmt.Errorf("api error: %s", sinaResp.Result.Status.Msg)
+	}
+
 	var news []string
-	for _, item := range resp.Lives {
-		content := item.Digest
-		if content == "" {
-			content = item.Title
-		}
-		if len(content) > 100 {
-			content = content[:100] + "..."
-		}
-		news = append(news, fmt.Sprintf("[%s] %s", item.Time, content))
+	for _, item := range sinaResp.Result.Data.Feed.List {
+		// Clean text (Sina rich_text might have HTML or special chars)
+		text := item.RichText
+		// Basic cleaning if needed, usually it's plain text or minimal HTML
+		news = append(news, fmt.Sprintf("[%s] %s", item.CreateTime, text))
 	}
 	return news, nil
 }

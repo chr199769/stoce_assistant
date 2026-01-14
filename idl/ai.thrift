@@ -32,7 +32,21 @@ struct ImageRecognitionResponse {
     1: list<RecognizedStock> stocks
 }
 
+struct MarketReviewRequest {
+    1: string date
+    2: list<string> focus_sectors
+}
+
+struct MarketReviewResponse {
+    1: string summary
+    2: string sector_analysis
+    3: string sentiment_analysis
+    4: list<string> key_risks
+    5: list<string> opportunities
+}
+
 service AIService {
     GetPredictionResponse GetPrediction(1: GetPredictionRequest req)
     ImageRecognitionResponse ImageRecognition(1: ImageRecognitionRequest req)
+    MarketReviewResponse MarketReview(1: MarketReviewRequest req)
 }

@@ -34,7 +34,50 @@ struct GetFinancialReportResponse {
     1: list<FinancialData> reports
 }
 
+// --- New Structures for Sector & Sentiment ---
+
+struct SectorInfo {
+    1: string code
+    2: string name
+    3: double change_percent
+    4: double net_inflow
+    5: string top_stock_name
+    6: string top_stock_code
+    7: string type // "concept" or "industry"
+}
+
+struct GetMarketSectorsRequest {
+    1: string type // "concept" or "industry", default "concept"
+    2: i32 limit   // default 20
+}
+
+struct GetMarketSectorsResponse {
+    1: list<SectorInfo> sectors
+}
+
+struct LimitUpStock {
+    1: string code
+    2: string name
+    3: double price
+    4: double change_percent
+    5: string limit_up_type // e.g., "首板", "2连板"
+    6: string reason
+    7: bool is_broken
+}
+
+struct GetLimitUpPoolRequest {
+    1: string date // Optional, YYYY-MM-DD
+}
+
+struct GetLimitUpPoolResponse {
+    1: list<LimitUpStock> stocks
+}
+
 service StockService {
     GetRealtimeResponse GetRealtime(1: GetRealtimeRequest req)
     GetFinancialReportResponse GetFinancialReport(1: GetFinancialReportRequest req)
+    
+    // New methods
+    GetMarketSectorsResponse GetMarketSectors(1: GetMarketSectorsRequest req)
+    GetLimitUpPoolResponse GetLimitUpPool(1: GetLimitUpPoolRequest req)
 }

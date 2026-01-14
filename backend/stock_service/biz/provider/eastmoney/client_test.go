@@ -37,3 +37,19 @@ func TestGetFinancialReports(t *testing.T) {
 	assert.Nil(t, err) // Should return empty list, not error
 	assert.Empty(t, reports)
 }
+
+func TestGetSectorRank(t *testing.T) {
+	client := NewClient()
+	sectors, err := client.GetSectorRank(context.Background(), "concept", 5)
+	if err != nil {
+		t.Logf("Failed to get sector rank: %v", err)
+		return
+	}
+	assert.Nil(t, err)
+	assert.NotEmpty(t, sectors)
+	for _, s := range sectors {
+		t.Logf("Sector: %s, Change: %.2f%%, NetInflow: %.2f", s.Name, s.ChangePercent, s.NetInflow)
+		assert.NotEmpty(t, s.Code)
+		assert.NotEmpty(t, s.Name)
+	}
+}

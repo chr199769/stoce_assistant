@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"regexp"
 	"stock_assistant/backend/ai_service/biz/tool"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
-	"stock_assistant/backend/stock_service/kitex_gen/stock/stockservice"
+	"stock_assistant/backend/ai_service/kitex_gen/stock"
+	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 	"strings"
 	"time"
 
@@ -102,10 +104,10 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 
 	// 3. Create Tools
 	stockTool := tool.NewStockPriceTool(p.stockClient)
-	newsTool := tool.NewNewsTool()
 	marketTool := tool.NewMarketInfoTool()
 	analysisTool := tool.NewStockAnalysisTool()
-	t := []tools.Tool{stockTool, newsTool, marketTool, analysisTool}
+	sectorTool := tool.NewSectorTool(p.stockClient)
+	t := []tools.Tool{stockTool, marketTool, analysisTool, sectorTool}
 
 	// Pre-fetch stock data to ensure accuracy and avoid tool calling failures
 	stockData, err := stockTool.Call(ctx, stockCode)
@@ -113,8 +115,10 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 		log.Printf("Failed to pre-fetch stock data: %v", err)
 		stockData = fmt.Sprintf("Error fetching stock data: %v", err)
 	}
-	newsData, _ := newsTool.Call(ctx, stockCode)
-	marketData, _ := marketTool.Call(ctx, stockCode)
+
+	// Pre-fetch market info (news + dragon tiger + trends) using the unified MarketInfoTool
+	marketInfo, _ := marketTool.Call(ctx, stockCode)
+
 	analysisData, _ := analysisTool.Call(ctx, stockCode)
 
 	// 4. Create Agent
@@ -125,8 +129,8 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 	// 5. Run Chain
 	// Determine Trading Status and Context
 	isTrading := IsTradingTime()
-	tradingStatusStr := "Market Closed"
-	predictionFocus := "Prediction for Next Day & 3 Days"
+	tradingStatusStr := "已收盘"
+	predictionFocus := "次日及未来3日预测"
 	timeContextInstruction := `
 - Current Status: Market Closed (Inter-day / Weekend)
 - Focus: Summarize the full-day performance, analyze Dragon & Tiger List data, and provide an outlook for the next trading day and the next 3 days.
@@ -134,8 +138,8 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 `
 
 	if isTrading {
-		tradingStatusStr = "Intraday Trading (9:15-15:00)"
-		predictionFocus = "Prediction for Today's Close & 3 Days"
+		tradingStatusStr = "盘中交易 (9:15-15:00)"
+		predictionFocus = "当日收盘及未来3日预测"
 		timeContextInstruction = `
 - Current Status: Intraday Trading (Live Market)
 - Focus: Analyze real-time Order Book pressure (Total Buy/Sell), WeiBi/WeiCha, and immediate momentum.
@@ -152,14 +156,11 @@ Here is the real-time data for the stock:
 %s
 
 [Advanced Analysis Data]
-(Includes Order Book, Chip Distribution, Industry Info, Dragon Tiger List History, Northbound Funds, Stock Heat, Regulatory Notices)
+(Includes Order Book, Chip Distribution, Industry Info, Dragon Tiger List History, Stock Heat, Regulatory Notices)
 %s
 
-[Recent News]
-%s
-
-[Market & Policy Info]
-(Includes Dragon & Tiger List status, and relevant news about Musk, Trump, Policy, Industry)
+[Market Intelligence]
+(Includes Recent Stock News, Dragon & Tiger Status, Social Trends, and General Market/Policy News)
 %s
 
 Process (Professional Trader Logic):
@@ -171,7 +172,6 @@ Process (Professional Trader Logic):
    - Policy-supported sectors enjoy valuation premiums; suppressed ones must be avoided.
 
 3. **Funds & Chips (The "Ground")**:
-   - **Northbound Funds**: Check "Northbound Net Inflow". Is "Smart Money" entering?
    - **Dragon Tiger List**: Analyze if institutional or speculative funds are active.
    - **Chip Distribution**: Check "Winner Rate" and "Cost Range". Is the main force accumulating (low cost) or distributing (high cost)?
    - **Order Book**: Analyze intraday pressure (Total Pending Buy/Sell).
@@ -193,31 +193,86 @@ Process (Professional Trader Logic):
 7. **Conclusion**: Summarize the key logic using the "Trader's Perspective".
 
 Output requirements:
-- **Language**: The final answer MUST be in Chinese (Simplified Chinese).
+- **Language**: The final answer MUST be in Chinese (Simplified Chinese). ALL headers and labels MUST be in Chinese.
 - **Tone**: Professional, objective, insightful (like a senior trader).
 - **Structure**:
-  - Stock Name & Code
-  - Current Price & Status
-  - Time Context: %s
-  - **Core Logic Analysis**:
-    - 🏛️ Policy & Macro (天时)
-    - 💰 Funds & Chips (地利) - Include Northbound & Order Book
-    - 🗣️ Sentiment (人和) - Include Stock Heat
-  - **Risk Assessment (风控)**: Regulatory & Volatility Check
-  - **Prediction (%s)**: [Trend] - [Reason]
-  - Confidence Score
-  - Key Driving Factors
+  - 股票名称与代码
+  - 当前价格与状态
+  - 时间背景: %s
+  - **核心逻辑分析**:
+    - 🏛️ 政策与宏观 (天时)
+    - 💰 资金与筹码 (地利) - 包含盘口分析
+    - 🗣️ 情绪与心理 (人和) - 包含个股热度
+  - **风控评估 (风控)**: 监管与波动率检查
+  - **走势预测 (%s)**: [趋势] - [理由]
+  - 置信度评分: [0-1]
+  - 关键驱动因素
 
-Output your final answer as a detailed analysis in Chinese.
-`, stockCode, time.Now().Format("2006-01-02 15:04:05"), tradingStatusStr, stockData, analysisData, newsData, marketData, timeContextInstruction, predictionFocus, tradingStatusStr, predictionFocus)
+IMPORTANT: After the detailed analysis, you MUST output a metadata block separated by "---METADATA---".
+The metadata block MUST be a valid JSON object with the following fields:
+- "confidence": (float) The same confidence score as in the analysis (0.0 to 1.0).
+- "news_summary": (string) A concise summary of the most important news/events driving the prediction (max 50 words).
+
+Example Output:
+Final Answer:
+... (Analysis Text) ...
+
+---METADATA---
+{"confidence": 0.85, "news_summary": "Policy support for low-altitude economy and 5G drives positive outlook despite short-term selling pressure."}
+
+Output your final answer starting with "Final Answer:", followed by the detailed analysis in Chinese, and then the metadata block.
+`, stockCode, time.Now().Format("2006-01-02 15:04:05"), tradingStatusStr, stockData, analysisData, marketInfo, timeContextInstruction, predictionFocus, tradingStatusStr, predictionFocus)
 
 	res, err := chains.Run(ctx, executor, input)
 	if err != nil {
-		return "", 0, "", err
+		// Fallback: If LangChain fails to parse the output but the model actually returned the content
+		// (common with "unable to parse agent output" error), we try to extract it.
+		if strings.Contains(err.Error(), "unable to parse agent output") {
+			log.Printf("LangChain parse error, attempting to recover content from error message")
+			// The error message format is usually: "unable to parse agent output: <actual_output>"
+			prefix := "unable to parse agent output: "
+			errMsg := err.Error()
+			if idx := strings.Index(errMsg, prefix); idx != -1 {
+				res = errMsg[idx+len(prefix):]
+				// Proceed to parsing
+			} else {
+				return "", 0, "", err
+			}
+		} else {
+			return "", 0, "", err
+		}
 	}
 
-	// TODO: Parse confidence from text or use a structured output parser in the future
-	return res, 0.85, "See analysis for details", nil
+	// Parse Output
+	analysis := res
+	confidence := 0.5 // Default
+	newsSummary := "See analysis for details"
+
+	parts := strings.Split(res, "---METADATA---")
+	if len(parts) > 1 {
+		analysis = strings.TrimSpace(parts[0])
+		metadataJSON := strings.TrimSpace(parts[1])
+		// Clean JSON (remove potential markdown code blocks)
+		metadataJSON = strings.TrimPrefix(metadataJSON, "```json")
+		metadataJSON = strings.TrimPrefix(metadataJSON, "```")
+		metadataJSON = strings.TrimSuffix(metadataJSON, "```")
+		metadataJSON = strings.TrimSpace(metadataJSON)
+
+		var metadata struct {
+			Confidence  float64 `json:"confidence"`
+			NewsSummary string  `json:"news_summary"`
+		}
+		if err := json.Unmarshal([]byte(metadataJSON), &metadata); err == nil {
+			confidence = metadata.Confidence
+			newsSummary = metadata.NewsSummary
+		} else {
+			log.Printf("Failed to parse metadata JSON: %v. JSON: %s", err, metadataJSON)
+		}
+	} else {
+		log.Printf("Metadata separator not found in response")
+	}
+
+	return analysis, confidence, newsSummary, nil
 }
 
 func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte, modelName string) ([]*ai.RecognizedStock, error) {
@@ -254,15 +309,6 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 
 	log.Printf("Using LLM Provider for Image Recognition: %s, Model: %s", cfg.Provider, cfg.ModelName)
 
-	// if cfg.Provider == ProviderFake {
-	// 	// Mock implementation
-	// 	time.Sleep(1 * time.Second)
-	// 	return []*ai.RecognizedStock{
-	// 		{Code: "sh600519", Name: "贵州茅台"},
-	// 		{Code: "sz000858", Name: "五粮液"},
-	// 	}, nil
-	// }
-
 	// 2. Create LLM
 	llmClient, err := NewModel(ctx, cfg)
 	if err != nil {
@@ -270,24 +316,24 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 	}
 
 	// 3. Prepare Image
-	// OpenAI expects base64 image URL: data:image/jpeg;base64,{base64_image}
-	// We assume jpeg/png compatibility.
+	// Detect content type
+	mimeType := http.DetectContentType(imageData)
 	base64Image := base64.StdEncoding.EncodeToString(imageData)
-	imageURL := fmt.Sprintf("data:image/jpeg;base64,%s", base64Image)
+	imageURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image)
 
 	// 4. Create Message
-	prompt := `Identify any stock market information in this image. 
-If you find stock codes and names, list them. 
-Focus on A-share stocks (Shanghai/Shenzhen).
-If the image contains a list of stocks, extract all of them.
-If the image contains a chart for a specific stock, extract that stock.
+	prompt := `请识别这张图片中的股票市场信息。
+如果发现股票代码和名称，请列出它们。
+重点关注A股（上海/深圳）。
+如果图片包含股票列表，请提取所有股票。
+如果图片是某只股票的走势图，请提取该股票。
 
-Return ONLY a JSON array of objects with "code" and "name" fields.
-Ensure the response is a valid JSON array enclosed in square brackets [].
-Do NOT add any text before or after the JSON array.
-Example: [{"code": "sh600519", "name": "Moutai"}, {"code": "sz000001", "name": "Ping An Bank"}]
-If no stocks are found, return empty array [].
-Do NOT include any markdown formatting (like ` + "```json" + `). Just the raw JSON string.`
+仅返回一个包含 "code" 和 "name" 字段的 JSON 对象数组。
+确保响应是方括号 [] 括起来的有效 JSON 数组。
+不要在 JSON 数组前后添加任何文本。
+示例：[{"code": "sh600519", "name": "贵州茅台"}, {"code": "sz000001", "name": "平安银行"}]
+如果未找到股票，则返回空数组 []。
+不要包含任何 markdown 格式（如 ` + "```json" + `）。只返回原始 JSON 字符串。`
 
 	messages := []llms.MessageContent{
 		{
@@ -360,7 +406,9 @@ Do NOT include any markdown formatting (like ` + "```json" + `). Just the raw JS
 
 		if len(stocks) == 0 {
 			// Only return error if regex also failed to find anything
-			return nil, fmt.Errorf("failed to parse stock info: %w", err)
+			// Return empty list instead of error to avoid 500
+			log.Printf("Failed to parse stock info from image (JSON & Regex failed): %v", err)
+			return []*ai.RecognizedStock{}, nil
 		}
 	} else {
 		for _, s := range tempStocks {
@@ -383,4 +431,120 @@ Do NOT include any markdown formatting (like ` + "```json" + `). Just the raw JS
 	}
 
 	return stocks, nil
+}
+
+func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, date string) (*ai.MarketReviewResponse, error) {
+	// 1. Determine ModelConfig
+	var cfg ModelConfig
+	if p.fileConfig != nil {
+		// Use default provider for now
+		var ok bool
+		cfg, ok = p.fileConfig.Models[string(p.fileConfig.CurrentProvider)]
+		if ok {
+			cfg.Provider = p.fileConfig.CurrentProvider
+		} else {
+			return nil, fmt.Errorf("provider not found")
+		}
+	} else {
+		return nil, fmt.Errorf("no config found")
+	}
+
+	log.Printf("Using LLM Provider for Market Review: %s, Model: %s", cfg.Provider, cfg.ModelName)
+
+	// 2. Create LLM
+	llmClient, err := NewModel(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create llm: %w", err)
+	}
+
+	// 3. Prepare Data Context
+	var sectorSummary strings.Builder
+	sectorSummary.WriteString("Top Sectors:\n")
+	for i, s := range sectors {
+		if i >= 10 { // Top 10
+			break
+		}
+		sectorSummary.WriteString(fmt.Sprintf("- %s: +%.2f%% (Net Inflow: %.2f), Top Stock: %s\n", s.Name, s.ChangePercent, s.NetInflow, s.TopStockName))
+	}
+
+	var limitUpSummary strings.Builder
+	limitUpSummary.WriteString(fmt.Sprintf("Limit Up Pool (Total: %d):\n", len(limitUps)))
+	// Simple stats
+	typeCount := make(map[string]int)
+	for _, s := range limitUps {
+		typeCount[s.LimitUpType]++
+		limitUpSummary.WriteString(fmt.Sprintf("- %s: %s, %s, %s\n", s.Name, s.LimitUpType, s.Reason, s.ChangePercent))
+	}
+
+	// 4. Create Prompt
+	prompt := fmt.Sprintf(`You are an expert Stock Market Analyst.
+Your task is to provide a comprehensive "Market Review" (复盘) for the A-share market on %s.
+
+Here is the market data:
+
+[Sector Performance]
+%s
+
+[Limit-Up (Sentiment) Data]
+%s
+
+Please analyze the data and generate a structured review in Chinese (Simplified).
+
+Structure:
+1. **Market Summary (市场总览)**: A brief summary of today's market emotion and main themes.
+2. **Sector Analysis (板块分析)**: Which sectors are strong? Is there a clear main line? Where is the money flowing?
+3. **Sentiment Analysis (情绪分析)**: Analyze the limit-up pool. Is the sentiment heating up or cooling down? Are there high-space stocks (连板高度)?
+4. **Risks (风险提示)**: Any potential risks based on the data?
+5. **Opportunities (明日机会)**: Based on today's rotation, what to look for tomorrow?
+
+Output ONLY a JSON object with the following fields:
+{
+  "summary": "...",
+  "sector_analysis": "...",
+  "sentiment_analysis": "...",
+  "key_risks": ["risk1", "risk2"],
+  "opportunities": ["opp1", "opp2"]
+}
+
+Ensure the response is valid JSON. Do not include markdown formatting like `+"```json"+`.
+`, date, sectorSummary.String(), limitUpSummary.String())
+
+	messages := []llms.MessageContent{
+		{
+			Role: llms.ChatMessageTypeHuman,
+			Parts: []llms.ContentPart{
+				llms.TextContent{Text: prompt},
+			},
+		},
+	}
+
+	// 5. Generate
+	resp, err := llmClient.GenerateContent(ctx, messages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate review: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("no content generated")
+	}
+
+	content := resp.Choices[0].Content
+	log.Printf("Raw Review Response: %s", content)
+
+	// 6. Parse JSON
+	content = strings.TrimSpace(content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var review ai.MarketReviewResponse
+	if err := json.Unmarshal([]byte(content), &review); err != nil {
+		log.Printf("Failed to parse review JSON: %v. Raw: %s", err, content)
+		// Fallback: put everything in summary
+		return &ai.MarketReviewResponse{
+			Summary: content,
+		}, nil
+	}
+
+	return &review, nil
 }

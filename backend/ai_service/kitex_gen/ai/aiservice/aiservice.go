@@ -27,6 +27,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"MarketReview": kitex.NewMethodInfo(
+		marketReviewHandler,
+		newAIServiceMarketReviewArgs,
+		newAIServiceMarketReviewResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 }
 
 var (
@@ -129,6 +136,24 @@ func newAIServiceImageRecognitionResult() interface{} {
 	return ai.NewAIServiceImageRecognitionResult()
 }
 
+func marketReviewHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*ai.AIServiceMarketReviewArgs)
+	realResult := result.(*ai.AIServiceMarketReviewResult)
+	success, err := handler.(ai.AIService).MarketReview(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newAIServiceMarketReviewArgs() interface{} {
+	return ai.NewAIServiceMarketReviewArgs()
+}
+
+func newAIServiceMarketReviewResult() interface{} {
+	return ai.NewAIServiceMarketReviewResult()
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -154,6 +179,16 @@ func (p *kClient) ImageRecognition(ctx context.Context, req *ai.ImageRecognition
 	_args.Req = req
 	var _result ai.AIServiceImageRecognitionResult
 	if err = p.c.Call(ctx, "ImageRecognition", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) MarketReview(ctx context.Context, req *ai.MarketReviewRequest) (r *ai.MarketReviewResponse, err error) {
+	var _args ai.AIServiceMarketReviewArgs
+	_args.Req = req
+	var _result ai.AIServiceMarketReviewResult
+	if err = p.c.Call(ctx, "MarketReview", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

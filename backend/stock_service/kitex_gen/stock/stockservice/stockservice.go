@@ -27,6 +27,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"GetMarketSectors": kitex.NewMethodInfo(
+		getMarketSectorsHandler,
+		newStockServiceGetMarketSectorsArgs,
+		newStockServiceGetMarketSectorsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetLimitUpPool": kitex.NewMethodInfo(
+		getLimitUpPoolHandler,
+		newStockServiceGetLimitUpPoolArgs,
+		newStockServiceGetLimitUpPoolResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 }
 
 var (
@@ -129,6 +143,42 @@ func newStockServiceGetFinancialReportResult() interface{} {
 	return stock.NewStockServiceGetFinancialReportResult()
 }
 
+func getMarketSectorsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*stock.StockServiceGetMarketSectorsArgs)
+	realResult := result.(*stock.StockServiceGetMarketSectorsResult)
+	success, err := handler.(stock.StockService).GetMarketSectors(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newStockServiceGetMarketSectorsArgs() interface{} {
+	return stock.NewStockServiceGetMarketSectorsArgs()
+}
+
+func newStockServiceGetMarketSectorsResult() interface{} {
+	return stock.NewStockServiceGetMarketSectorsResult()
+}
+
+func getLimitUpPoolHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*stock.StockServiceGetLimitUpPoolArgs)
+	realResult := result.(*stock.StockServiceGetLimitUpPoolResult)
+	success, err := handler.(stock.StockService).GetLimitUpPool(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newStockServiceGetLimitUpPoolArgs() interface{} {
+	return stock.NewStockServiceGetLimitUpPoolArgs()
+}
+
+func newStockServiceGetLimitUpPoolResult() interface{} {
+	return stock.NewStockServiceGetLimitUpPoolResult()
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -154,6 +204,26 @@ func (p *kClient) GetFinancialReport(ctx context.Context, req *stock.GetFinancia
 	_args.Req = req
 	var _result stock.StockServiceGetFinancialReportResult
 	if err = p.c.Call(ctx, "GetFinancialReport", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest) (r *stock.GetMarketSectorsResponse, err error) {
+	var _args stock.StockServiceGetMarketSectorsArgs
+	_args.Req = req
+	var _result stock.StockServiceGetMarketSectorsResult
+	if err = p.c.Call(ctx, "GetMarketSectors", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest) (r *stock.GetLimitUpPoolResponse, err error) {
+	var _args stock.StockServiceGetLimitUpPoolArgs
+	_args.Req = req
+	var _result stock.StockServiceGetLimitUpPoolResult
+	if err = p.c.Call(ctx, "GetLimitUpPool", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

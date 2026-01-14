@@ -13,6 +13,8 @@ import (
 type Client interface {
 	GetRealtime(ctx context.Context, req *stock.GetRealtimeRequest, callOptions ...callopt.Option) (r *stock.GetRealtimeResponse, err error)
 	GetFinancialReport(ctx context.Context, req *stock.GetFinancialReportRequest, callOptions ...callopt.Option) (r *stock.GetFinancialReportResponse, err error)
+	GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest, callOptions ...callopt.Option) (r *stock.GetMarketSectorsResponse, err error)
+	GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest, callOptions ...callopt.Option) (r *stock.GetLimitUpPoolResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -52,4 +54,14 @@ func (p *kStockServiceClient) GetRealtime(ctx context.Context, req *stock.GetRea
 func (p *kStockServiceClient) GetFinancialReport(ctx context.Context, req *stock.GetFinancialReportRequest, callOptions ...callopt.Option) (r *stock.GetFinancialReportResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetFinancialReport(ctx, req)
+}
+
+func (p *kStockServiceClient) GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest, callOptions ...callopt.Option) (r *stock.GetMarketSectorsResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetMarketSectors(ctx, req)
+}
+
+func (p *kStockServiceClient) GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest, callOptions ...callopt.Option) (r *stock.GetLimitUpPoolResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetLimitUpPool(ctx, req)
 }

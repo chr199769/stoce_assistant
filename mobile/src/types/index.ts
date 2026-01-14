@@ -29,3 +29,14 @@ export interface RecognizedStock {
 export interface ImageRecognitionResponse {
   stocks: RecognizedStock[];
 }
+
+export interface MarketReviewRequest {
+  date?: string;
+  focus_sectors?: string[];
+}
+
+export interface MarketReviewResponse {
+  summary: string;
+  confidence: number;
+  date: string;
+}

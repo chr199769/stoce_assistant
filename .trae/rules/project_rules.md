@@ -2,6 +2,7 @@
 当用户输入以下指令时，你需要按照执行指令对应的操作
 1. /do 读取文件内容，按照模板步骤和项目上下文执行，该命令一定是用户选择了openspec中的某个变更
 2. /feat 使用openspec流程创建一个变更提案，严格遵循OpenSpec Instructions，用户会明确指定变更内容，例如：/feat 新增股票选股功能
+3. /arch 执行openspec的归档功能，将所有变更都归档
 
 <!-- OPENSPEC:START -->
 # OpenSpec 指南

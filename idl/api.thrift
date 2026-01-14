@@ -56,9 +56,21 @@ struct GetFinancialReportResponse {
     1: list<FinancialData> reports
 }
 
+struct MarketReviewRequest {
+    1: string date (api.body="date") // Optional: YYYY-MM-DD
+    2: list<string> focus_sectors (api.body="focus_sectors") // Optional
+}
+
+struct MarketReviewResponse {
+    1: string summary
+    2: double confidence
+    3: string date
+}
+
 service StockAPI {
     RealtimeResponse GetRealtime(1: GetRealtimeRequest req) (api.get="/api/stocks/:code/realtime")
     PredictionResponse GetPrediction(1: PredictionRequest req) (api.post="/api/prediction/:code")
     ImageRecognitionResponse RecognizeStockImage(1: ImageRecognitionRequest req) (api.post="/api/image/recognize")
     GetFinancialReportResponse GetFinancialReport(1: GetFinancialReportRequest req) (api.get="/api/stocks/:code/financial")
+    MarketReviewResponse MarketReview(1: MarketReviewRequest req) (api.post="/api/market/review")
 }

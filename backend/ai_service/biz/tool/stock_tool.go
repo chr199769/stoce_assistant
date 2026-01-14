@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"stock_assistant/backend/stock_service/kitex_gen/stock"
-	"stock_assistant/backend/stock_service/kitex_gen/stock/stockservice"
+	"stock_assistant/backend/ai_service/kitex_gen/stock"
+	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 	"strings"
 )
 
@@ -77,7 +77,7 @@ func (t *StockAnalysisTool) Name() string {
 }
 
 func (t *StockAnalysisTool) Description() string {
-	return "Useful for getting advanced stock analysis data including Dragon Tiger List history, Chip Distribution, Order Book, Industry info, Northbound Funds, Guba Popularity, and Regulatory Notices. Input should be the stock code (e.g., 600519)."
+	return "Useful for getting advanced stock analysis data including Dragon Tiger List history, Chip Distribution, Order Book, Industry info, Guba Popularity, and Regulatory Notices. Input should be the stock code (e.g., 600519)."
 }
 
 func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, error) {
@@ -132,13 +132,6 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 		log.Printf("Error fetching LHB history: %v", err)
 	}
 
-	// 5. Northbound Funds (Market Level)
-	northbound, err := GetNorthboundFunds()
-	if err != nil {
-		log.Printf("Error fetching Northbound funds: %v", err)
-		northbound = "Error fetching Northbound funds"
-	}
-
 	// 6. Stock Heat (Sentiment)
 	heat, err := GetStockHeat(input)
 	if err != nil {
@@ -172,7 +165,6 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 	sb.WriteString(chip)
 
 	sb.WriteString("\n\n[Market Sentiment & Funds]\n")
-	sb.WriteString(northbound + "\n")
 	sb.WriteString(heat)
 
 	sb.WriteString("\n\n[Dragon Tiger List (Last 5)]\n")

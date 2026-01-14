@@ -27,3 +27,6 @@ yarn-error.log
 # Mobile specific (if any output lands in root)
 *.apk
 *.ipa
+
+# Secrets
+backend/ai_service/conf/llm_config.json

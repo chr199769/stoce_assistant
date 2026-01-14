@@ -31,3 +31,11 @@ export const getPrediction = async (req: PredictionRequest): Promise<PredictionR
   });
   return response.data;
 };
+
+export const marketReview = async (req: MarketReviewRequest): Promise<MarketReviewResponse> => {
+  const response = await client.post<MarketReviewResponse>('/api/market/review', {
+    date: req.date,
+    focus_sectors: req.focus_sectors,
+  });
+  return response.data;
+};
