@@ -6,6 +6,7 @@ require (
 	github.com/cloudwego/gopkg v0.1.8
 	github.com/cloudwego/kitex v0.15.4
 	github.com/cloudwego/kitex/pkg/protocol/bthrift v0.0.0-20251226083253-6e03ff303082
+	github.com/stretchr/testify v1.10.0
 	github.com/tmc/langchaingo v0.1.14
 )
 
@@ -52,7 +53,6 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tidwall/gjson v1.17.3 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect

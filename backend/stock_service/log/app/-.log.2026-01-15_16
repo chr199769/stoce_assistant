@@ -1,0 +1,1 @@
+Warn 2026-01-15 16:02:44,786 v1(7) reduced_logger.go:52 10.67.166.250 - - default - 0 [KITEX] send cp request failed: err=<Error: Post "http://10.199.44.132:10347/api/v2/govern/multi_cached_list": dial tcp 10.199.44.132:10347: connect: network is unreachable>

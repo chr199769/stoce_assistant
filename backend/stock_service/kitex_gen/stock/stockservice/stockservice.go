@@ -41,6 +41,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"GetSectorStocks": kitex.NewMethodInfo(
+		getSectorStocksHandler,
+		newStockServiceGetSectorStocksArgs,
+		newStockServiceGetSectorStocksResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetDragonTigerList": kitex.NewMethodInfo(
+		getDragonTigerListHandler,
+		newStockServiceGetDragonTigerListArgs,
+		newStockServiceGetDragonTigerListResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 }
 
 var (
@@ -179,6 +193,42 @@ func newStockServiceGetLimitUpPoolResult() interface{} {
 	return stock.NewStockServiceGetLimitUpPoolResult()
 }
 
+func getSectorStocksHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*stock.StockServiceGetSectorStocksArgs)
+	realResult := result.(*stock.StockServiceGetSectorStocksResult)
+	success, err := handler.(stock.StockService).GetSectorStocks(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newStockServiceGetSectorStocksArgs() interface{} {
+	return stock.NewStockServiceGetSectorStocksArgs()
+}
+
+func newStockServiceGetSectorStocksResult() interface{} {
+	return stock.NewStockServiceGetSectorStocksResult()
+}
+
+func getDragonTigerListHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*stock.StockServiceGetDragonTigerListArgs)
+	realResult := result.(*stock.StockServiceGetDragonTigerListResult)
+	success, err := handler.(stock.StockService).GetDragonTigerList(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newStockServiceGetDragonTigerListArgs() interface{} {
+	return stock.NewStockServiceGetDragonTigerListArgs()
+}
+
+func newStockServiceGetDragonTigerListResult() interface{} {
+	return stock.NewStockServiceGetDragonTigerListResult()
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -224,6 +274,26 @@ func (p *kClient) GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolR
 	_args.Req = req
 	var _result stock.StockServiceGetLimitUpPoolResult
 	if err = p.c.Call(ctx, "GetLimitUpPool", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest) (r *stock.GetSectorStocksResponse, err error) {
+	var _args stock.StockServiceGetSectorStocksArgs
+	_args.Req = req
+	var _result stock.StockServiceGetSectorStocksResult
+	if err = p.c.Call(ctx, "GetSectorStocks", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest) (r *stock.GetDragonTigerListResponse, err error) {
+	var _args stock.StockServiceGetDragonTigerListArgs
+	_args.Req = req
+	var _result stock.StockServiceGetDragonTigerListResult
+	if err = p.c.Call(ctx, "GetDragonTigerList", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

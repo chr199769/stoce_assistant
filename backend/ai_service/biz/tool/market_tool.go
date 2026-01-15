@@ -3,13 +3,125 @@ package tool
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
+
+	"stock_assistant/backend/ai_service/biz/tool/eastmoney"
 )
 
-type MarketInfoTool struct{}
+type MarketInfoTool struct {
+	EastMoneyClient *eastmoney.Client
+}
 
 func NewMarketInfoTool() *MarketInfoTool {
-	return &MarketInfoTool{}
+	return &MarketInfoTool{
+		EastMoneyClient: eastmoney.NewClient(),
+	}
+}
+
+// ... existing code ...
+
+type DragonTigerTool struct {
+	EastMoneyClient *eastmoney.Client
+}
+
+func NewDragonTigerTool() *DragonTigerTool {
+	return &DragonTigerTool{
+		EastMoneyClient: eastmoney.NewClient(),
+	}
+}
+
+func (t *DragonTigerTool) Name() string {
+	return "DragonTigerList"
+}
+
+func (t *DragonTigerTool) Description() string {
+	return "Get daily Dragon Tiger List (Longhu Bang) data. Input can be a date (YYYY-MM-DD) or empty for today."
+}
+
+func (t *DragonTigerTool) Call(ctx context.Context, input string) (string, error) {
+	date := strings.TrimSpace(input)
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+
+	items, err := t.EastMoneyClient.GetDragonTigerList(ctx, date)
+	if err != nil {
+		return fmt.Sprintf("Error fetching Dragon Tiger List: %v", err), nil
+	}
+
+	if len(items) == 0 {
+		return "No Dragon Tiger List data found for this date.", nil
+	}
+
+	// Seat Mapping
+	seatMap := map[string]string{
+		"华泰证券股份有限公司北京雍和宫证券营业部":      "赵老哥",
+		"国泰君安证券股份有限公司上海江苏路证券营业部":     "章盟主",
+		"中国银河证券股份有限公司北京绍兴路证券营业部":      "赵老哥",
+		"东方财富证券股份有限公司拉萨团结路第二证券营业部": "拉萨天团",
+		"东方财富证券股份有限公司拉萨团结路第一证券营业部": "拉萨天团",
+		"东方财富证券股份有限公司拉萨东环路第二证券营业部":   "拉萨天团",
+		"东方财富证券股份有限公司拉萨东环路第一证券营业部":   "拉萨天团",
+		"招商证券股份有限公司深圳益田路免税商务大厦证券营业部": "益田路", // 校长?
+		"中信证券股份有限公司上海溧阳路证券营业部":       "孙哥",
+	}
+
+	// Sort by Net Inflow
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].NetInflow > items[j].NetInflow
+	})
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Dragon Tiger List (%s) - Top 5 Net Buy:\n", date))
+
+	for i := 0; i < 5 && i < len(items); i++ {
+		item := items[i]
+		sb.WriteString(fmt.Sprintf("\n%d. %s (%s) | Change: %.2f%% | Net: %.1f万\n", 
+			i+1, item.Name, item.Code, item.ChangePercent, item.NetInflow/10000))
+		sb.WriteString(fmt.Sprintf("   Reason: %s\n", item.Reason))
+		
+		// Fetch seats for Top 3 only to save API calls in this tool
+		if i < 3 {
+			buySeats, sellSeats, err := t.EastMoneyClient.GetDragonTigerSeats(ctx, item.Code, date)
+			if err == nil {
+				sb.WriteString("   [Top Buyer]:\n")
+				for k, seat := range buySeats {
+					if k >= 3 { break }
+					tag := ""
+					if t, ok := seatMap[seat.Name]; ok {
+						tag = fmt.Sprintf("[%s]", t)
+					} else if strings.Contains(seat.Name, "拉萨") {
+						tag = "[拉萨天团]"
+					} else if strings.Contains(seat.Name, "机构专用") {
+						tag = "[机构]"
+					} else if strings.Contains(seat.Name, "沪股通") || strings.Contains(seat.Name, "深股通") {
+						tag = "[北向]"
+					}
+					sb.WriteString(fmt.Sprintf("     - %s %s: %.0f万\n", seat.Name, tag, seat.NetAmt/10000))
+				}
+				
+				sb.WriteString("   [Top Seller]:\n")
+				for k, seat := range sellSeats {
+					if k >= 3 { break }
+					tag := ""
+					if t, ok := seatMap[seat.Name]; ok {
+						tag = fmt.Sprintf("[%s]", t)
+					} else if strings.Contains(seat.Name, "拉萨") {
+						tag = "[拉萨天团]"
+					} else if strings.Contains(seat.Name, "机构专用") {
+						tag = "[机构]"
+					} else if strings.Contains(seat.Name, "沪股通") || strings.Contains(seat.Name, "深股通") {
+						tag = "[北向]"
+					}
+					sb.WriteString(fmt.Sprintf("     - %s %s: %.0f万\n", seat.Name, tag, seat.NetAmt/10000))
+				}
+			}
+		}
+	}
+
+	return sb.String(), nil
 }
 
 func (t *MarketInfoTool) Name() string {

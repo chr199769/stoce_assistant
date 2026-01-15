@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { Appbar, Card, Text, Divider, Chip, Button, ActivityIndicator } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
 import { getRealtime, marketReview } from '../api/stock';
 import { RealtimeResponse, MarketReviewResponse } from '../types';
 import { PieChart } from 'react-native-chart-kit';
 
 const SummaryScreen = () => {
+  const navigation = useNavigation();
   const [indices, setIndices] = useState<RealtimeResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [review, setReview] = useState<MarketReviewResponse | null>(null);
@@ -41,11 +43,31 @@ const SummaryScreen = () => {
       const today = new Date().toISOString().split('T')[0];
       const res = await marketReview({ date: today });
       setReview(res);
+      // Parse Sector Analysis from review text if possible, or just use static for now.
+      // In a real app, the review response would have structured sector data.
     } catch (error) {
       console.error("Failed to fetch market review:", error);
     } finally {
       setReviewLoading(false);
     }
+  };
+
+  const handleSectorPress = (sectorName: string) => {
+    // Map common names to codes (Simplified mapping for demo)
+    // In a real app, you'd get code from the API response
+    const codeMap: Record<string, string> = {
+      '半导体': 'BK1036',
+      '新能源车': 'BK0900',
+      '人工智能': 'BK0985',
+      '科技': 'BK0696',
+      '金融': 'BK0475'
+    };
+
+    // Default to a tech sector if not found
+    const code = codeMap[sectorName] || 'BK0800';
+
+    // @ts-ignore
+    navigation.navigate('SectorDetail', { sectorCode: code, sectorName });
   };
 
   useEffect(() => {
@@ -109,7 +131,7 @@ const SummaryScreen = () => {
 
         <Text variant="titleMedium" style={styles.sectionTitle}>板块涨跌分布</Text>
         <Card style={styles.chartCard}>
-           <Card.Content>
+          <Card.Content>
             <PieChart
               data={sectorData}
               width={Dimensions.get('window').width - 64}
@@ -125,14 +147,14 @@ const SummaryScreen = () => {
               paddingLeft="15"
               absolute
             />
-           </Card.Content>
+          </Card.Content>
         </Card>
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>今日热点</Text>
+        <Text variant="titleMedium" style={styles.sectionTitle}>今日热点 (点击查看详情)</Text>
         <View style={styles.chipContainer}>
-          <Chip icon="fire" style={styles.chip} textStyle={{color: '#fff'}}>半导体</Chip>
-          <Chip icon="fire" style={styles.chip} textStyle={{color: '#fff'}}>新能源车</Chip>
-          <Chip icon="trending-up" style={styles.chip} textStyle={{color: '#fff'}}>人工智能</Chip>
+          <Chip icon="fire" style={styles.chip} textStyle={{ color: '#fff' }} onPress={() => handleSectorPress('半导体')}>半导体</Chip>
+          <Chip icon="fire" style={styles.chip} textStyle={{ color: '#fff' }} onPress={() => handleSectorPress('新能源车')}>新能源车</Chip>
+          <Chip icon="trending-up" style={styles.chip} textStyle={{ color: '#fff' }} onPress={() => handleSectorPress('人工智能')}>人工智能</Chip>
         </View>
 
       </ScrollView>

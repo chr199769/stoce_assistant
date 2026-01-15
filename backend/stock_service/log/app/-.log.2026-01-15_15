@@ -1,0 +1,16 @@
+Error 2026-01-15 15:10:17,150 v1(7) default_server_handler.go:260 10.67.166.250 - 02176846101699400000000000000000000ffff0a43a6fae50d36 default - 0 KITEX: processing request error, remoteService=none, remoteAddr=127.0.0.1:62583, error=biz error: eastmoney api failed or no data
+Error 2026-01-15 15:15:09,722 v1(7) default_server_handler.go:260 10.67.166.250 - 02176846130960400000000000000000000ffff0a43a6fa4bc45a default - 0 KITEX: processing request error, remoteService=none, remoteAddr=[::1]:63807, error=biz error: eastmoney api failed or no data
+Error 2026-01-15 15:15:32,242 v1(7) default_server_handler.go:260 10.67.166.250 - 02176846133217000000000000000000000ffff0a43a6fa2725fa default - 0 KITEX: processing request error, remoteService=none, remoteAddr=127.0.0.1:63864, error=biz error: eastmoney api failed or no data
+Info 2026-01-15 15:18:31,637 v1(7) debug.go:126 10.67.166.250 - - default - 0 shutting down debug server
+Info 2026-01-15 15:18:59,924 v1(7) debug.go:113 10.67.166.250 - - default - 0 starting debug server
+Info 2026-01-15 15:18:59,925 v1(7) server.go:63 10.67.166.250 - - default - 0 debug server listen at: [::]:18888
+Info 2026-01-15 15:18:59,375 v1(7) util.go:120 10.67.166.250 - - default - 0 [KITEX] getConfigSource: config source not set, use fallback (changeable by setting env KITEX_CONFIG_SOURCE=file), source=, fallback=cp
+Info 2026-01-15 15:18:59,394 v1(7) manager_wrapper.go:224 10.67.166.250 - - default - 0 [KITEX] load config and notify succeeded: service=-/default/1@BYTED-CP-1-callee
+Info 2026-01-15 15:18:59,914 v1(7) server.go:79 10.67.166.250 - - default - 0 KITEX: server listen at addr=[::]:8888
+Info 2026-01-15 15:19:59,440 v1(7) configurator.go:71 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[circuit breaker] starting synConfig...
+Info 2026-01-15 15:19:59,440 v1(7) configurator.go:75 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[circuit breaker] synConfigs success.
+Info 2026-01-15 15:19:59,440 v1(7) configurator.go:71 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[sampler] starting synConfig...
+Info 2026-01-15 15:19:59,440 v1(7) configurator.go:75 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[sampler] synConfigs success.
+Info 2026-01-15 15:19:59,447 v1(7) configurator.go:71 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[tracer] starting synConfig...
+Info 2026-01-15 15:19:59,447 v1(7) configurator.go:75 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[tracer] synConfigs success.
+Warn 2026-01-15 15:31:10,797 v1(7) reduced_logger.go:52 10.67.166.250 - - default - 0 [KITEX] send cp request failed: err=<Error: Post "http://10.35.128.149:9608/api/v2/govern/multi_cached_list": context deadline exceeded (Client.Timeout exceeded while awaiting headers)>

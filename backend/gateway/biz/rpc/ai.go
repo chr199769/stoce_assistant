@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"stock_assistant/backend/ai_service/kitex_gen/ai/aiservice"
+	"stock_assistant/backend/gateway/kitex_gen/ai/aiservice"
 
 	"github.com/cloudwego/kitex/client"
 )

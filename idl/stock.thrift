@@ -80,4 +80,53 @@ service StockService {
     // New methods
     GetMarketSectorsResponse GetMarketSectors(1: GetMarketSectorsRequest req)
     GetLimitUpPoolResponse GetLimitUpPool(1: GetLimitUpPoolRequest req)
+
+    // Phase 2: Sector Details & Dragon Tiger List
+    GetSectorStocksResponse GetSectorStocks(1: GetSectorStocksRequest req)
+    GetDragonTigerListResponse GetDragonTigerList(1: GetDragonTigerListRequest req)
+}
+
+struct SectorStockItem {
+    1: string code
+    2: string name
+    3: double price
+    4: double change_percent
+    5: i64 volume
+    6: double amount
+    7: double market_cap
+}
+
+struct GetSectorStocksRequest {
+    1: string sector_code
+}
+
+struct GetSectorStocksResponse {
+    1: list<SectorStockItem> stocks
+}
+
+struct DragonTigerSeat {
+    1: string name
+    2: double buy_amt
+    3: double sell_amt
+    4: double net_amt
+    5: list<string> tags
+}
+
+struct DragonTigerItem {
+    1: string code
+    2: string name
+    3: double close_price
+    4: double change_percent
+    5: string reason
+    6: double net_inflow
+    7: list<DragonTigerSeat> buy_seats
+    8: list<DragonTigerSeat> sell_seats
+}
+
+struct GetDragonTigerListRequest {
+    1: string date // YYYY-MM-DD
+}
+
+struct GetDragonTigerListResponse {
+    1: list<DragonTigerItem> items
 }

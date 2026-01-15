@@ -10,22 +10,8 @@ import (
 func NewServer(handler ai.AIService, opts ...server.Option) server.Server {
 	var options []server.Option
 
-
 	options = append(options, opts...)
 	options = append(options, server.WithCompatibleMiddlewareForUnary())
-
-	svr := server.NewServer(options...)
-	if err := svr.RegisterService(serviceInfo(), handler); err != nil {
-		panic(err)
-	}
-	return svr
-}
-
-// NewServerWithBytedConfig creates a server.Server with the given handler and options.
-func NewServerWithBytedConfig(handler ai.AIService, config interface{}, opts ...server.Option) server.Server {
-	var options []server.Option
-	options = append(options, server.WithCompatibleMiddlewareForUnary())
-	options = append(options, opts...)
 
 	svr := server.NewServer(options...)
 	if err := svr.RegisterService(serviceInfo(), handler); err != nil {

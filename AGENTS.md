@@ -15,4 +15,9 @@ Use `@/openspec/AGENTS.md` to learn:
 
 Keep this managed block so 'openspec update' can refresh the instructions.
 
+< MORE IMPORTANT>
+1. 使用中文答复
+2. 严禁使用内部依赖以及各种非开源依赖！
+3. 在编写变更、总结、任务时，除了openspec会校验的关键词（如`proposal`, `change`, `spec`, `MUST`, `SHOULD`等），都必须使用中文。你需要严格保相关文件可以通过openspec校验。
+
 <!-- OPENSPEC:END -->

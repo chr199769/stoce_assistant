@@ -1,0 +1,11 @@
+Info 2026-01-15 14:45:25,279 v1(7) debug.go:113 10.67.166.250 - - default - 0 starting debug server
+Info 2026-01-15 14:45:25,280 v1(7) server.go:63 10.67.166.250 - - default - 0 debug server listen at: [::]:18888
+Info 2026-01-15 14:45:24,482 v1(7) util.go:120 10.67.166.250 - - default - 0 [KITEX] getConfigSource: config source not set, use fallback (changeable by setting env KITEX_CONFIG_SOURCE=file), source=, fallback=cp
+Info 2026-01-15 14:45:24,502 v1(7) manager_wrapper.go:224 10.67.166.250 - - default - 0 [KITEX] load config and notify succeeded: service=-/default/1@BYTED-CP-1-callee
+Info 2026-01-15 14:45:25,272 v1(7) server.go:79 10.67.166.250 - - default - 0 KITEX: server listen at addr=[::]:8888
+Info 2026-01-15 14:46:24,672 v1(7) configurator.go:71 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[circuit breaker] starting synConfig...
+Info 2026-01-15 14:46:24,672 v1(7) configurator.go:75 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[circuit breaker] synConfigs success.
+Info 2026-01-15 14:46:24,672 v1(7) configurator.go:71 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[sampler] starting synConfig...
+Info 2026-01-15 14:46:24,672 v1(7) configurator.go:75 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[sampler] synConfigs success.
+Info 2026-01-15 14:46:24,707 v1(7) configurator.go:71 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[tracer] starting synConfig...
+Info 2026-01-15 14:46:24,707 v1(7) configurator.go:75 10.67.166.250 - - default - 0 [bytedtrace] NameSpace[tracer] synConfigs success.

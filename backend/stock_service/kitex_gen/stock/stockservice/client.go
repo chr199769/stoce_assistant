@@ -3,9 +3,9 @@
 package stockservice
 
 import (
+	"context"
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
-	"context"
 	stock "stock_assistant/backend/stock_service/kitex_gen/stock"
 )
 
@@ -15,6 +15,8 @@ type Client interface {
 	GetFinancialReport(ctx context.Context, req *stock.GetFinancialReportRequest, callOptions ...callopt.Option) (r *stock.GetFinancialReportResponse, err error)
 	GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest, callOptions ...callopt.Option) (r *stock.GetMarketSectorsResponse, err error)
 	GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest, callOptions ...callopt.Option) (r *stock.GetLimitUpPoolResponse, err error)
+	GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest, callOptions ...callopt.Option) (r *stock.GetSectorStocksResponse, err error)
+	GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest, callOptions ...callopt.Option) (r *stock.GetDragonTigerListResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -64,4 +66,14 @@ func (p *kStockServiceClient) GetMarketSectors(ctx context.Context, req *stock.G
 func (p *kStockServiceClient) GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest, callOptions ...callopt.Option) (r *stock.GetLimitUpPoolResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetLimitUpPool(ctx, req)
+}
+
+func (p *kStockServiceClient) GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest, callOptions ...callopt.Option) (r *stock.GetSectorStocksResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetSectorStocks(ctx, req)
+}
+
+func (p *kStockServiceClient) GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest, callOptions ...callopt.Option) (r *stock.GetDragonTigerListResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetDragonTigerList(ctx, req)
 }

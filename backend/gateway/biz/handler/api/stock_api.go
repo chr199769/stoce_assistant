@@ -6,10 +6,10 @@ import (
 	"context"
 	"io"
 
-	"stock_assistant/backend/ai_service/kitex_gen/ai"
+	"stock_assistant/backend/gateway/kitex_gen/ai"
 	api "stock_assistant/backend/gateway/biz/model/api"
 	"stock_assistant/backend/gateway/biz/rpc"
-	"stock_assistant/backend/stock_service/kitex_gen/stock"
+	"stock_assistant/backend/gateway/kitex_gen/stock"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -221,8 +221,112 @@ func MarketReview(ctx context.Context, c *app.RequestContext) {
 
 	resp := &api.MarketReviewResponse{
 		Summary:    rpcResp.Summary,
-		Confidence: 0.85, // Mock confidence as it's not in rpcResp yet
+		Confidence: 0.85,     // Mock confidence as it's not in rpcResp yet
 		Date:       req.Date, // Echo date
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetSectorStocks .
+// @router /api/stock/sector/stocks [GET]
+func GetSectorStocks(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetSectorStocksRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetSectorStocksRequest{
+		SectorCode: req.SectorCode,
+	}
+	rpcResp, err := rpc.StockClient.GetSectorStocks(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.GetSectorStocksResponse{
+		Stocks: make([]*api.SectorStockItem, 0),
+	}
+	if rpcResp.Stocks != nil {
+		for _, s := range rpcResp.Stocks {
+			resp.Stocks = append(resp.Stocks, &api.SectorStockItem{
+				Code:          s.Code,
+				Name:          s.Name,
+				Price:         s.Price,
+				ChangePercent: s.ChangePercent,
+				Volume:        s.Volume,
+				Amount:        s.Amount,
+				MarketCap:     s.MarketCap,
+			})
+		}
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetDragonTigerList .
+// @router /api/stock/dragontiger/list [GET]
+func GetDragonTigerList(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetDragonTigerListRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetDragonTigerListRequest{
+		Date: req.Date,
+	}
+	rpcResp, err := rpc.StockClient.GetDragonTigerList(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.GetDragonTigerListResponse{
+		Items: make([]*api.DragonTigerItem, 0),
+	}
+
+	if rpcResp.Items != nil {
+		for _, item := range rpcResp.Items {
+			// Map Seats
+			buySeats := make([]*api.DragonTigerSeat, 0)
+			for _, bs := range item.BuySeats {
+				buySeats = append(buySeats, &api.DragonTigerSeat{
+					Name:    bs.Name,
+					BuyAmt:  bs.BuyAmt,
+					SellAmt: bs.SellAmt,
+					NetAmt:  bs.NetAmt,
+					Tags:    bs.Tags,
+				})
+			}
+			sellSeats := make([]*api.DragonTigerSeat, 0)
+			for _, ss := range item.SellSeats {
+				sellSeats = append(sellSeats, &api.DragonTigerSeat{
+					Name:    ss.Name,
+					BuyAmt:  ss.BuyAmt,
+					SellAmt: ss.SellAmt,
+					NetAmt:  ss.NetAmt,
+					Tags:    ss.Tags,
+				})
+			}
+
+			resp.Items = append(resp.Items, &api.DragonTigerItem{
+				Code:          item.Code,
+				Name:          item.Name,
+				ClosePrice:    item.ClosePrice,
+				ChangePercent: item.ChangePercent,
+				Reason:        item.Reason,
+				NetInflow:     item.NetInflow,
+				BuySeats:      buySeats,
+				SellSeats:     sellSeats,
+			})
+		}
 	}
 
 	c.JSON(consts.StatusOK, resp)

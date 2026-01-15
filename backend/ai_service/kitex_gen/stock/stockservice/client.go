@@ -3,9 +3,9 @@
 package stockservice
 
 import (
+	"context"
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
-	"context"
 	stock "stock_assistant/backend/ai_service/kitex_gen/stock"
 )
 
@@ -15,13 +15,14 @@ type Client interface {
 	GetFinancialReport(ctx context.Context, req *stock.GetFinancialReportRequest, callOptions ...callopt.Option) (r *stock.GetFinancialReportResponse, err error)
 	GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest, callOptions ...callopt.Option) (r *stock.GetMarketSectorsResponse, err error)
 	GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest, callOptions ...callopt.Option) (r *stock.GetLimitUpPoolResponse, err error)
+	GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest, callOptions ...callopt.Option) (r *stock.GetSectorStocksResponse, err error)
+	GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest, callOptions ...callopt.Option) (r *stock.GetDragonTigerListResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
 func NewClient(destService string, opts ...client.Option) (Client, error) {
 	var options []client.Option
 	options = append(options, client.WithDestService(destService))
-
 
 	options = append(options, opts...)
 
@@ -67,30 +68,12 @@ func (p *kStockServiceClient) GetLimitUpPool(ctx context.Context, req *stock.Get
 	return p.kClient.GetLimitUpPool(ctx, req)
 }
 
-// NewClientWithBytedConfig creates a client for the service defined in IDL.
-func NewClientWithBytedConfig(destService string, config interface{}, opts ...client.Option) (Client, error) {
-	if config == nil {
-	}
-
-	var options []client.Option
-	options = append(options, client.WithDestService(destService))
-
-	clientServiceInfo := serviceInfoForClient()
-	options = append(options, opts...)
-	kc, err := client.NewClient(clientServiceInfo, options...)
-	if err != nil {
-		return nil, err
-	}
-	return &kStockServiceClient{
-		kClient: newServiceClient(kc),
-	}, nil
+func (p *kStockServiceClient) GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest, callOptions ...callopt.Option) (r *stock.GetSectorStocksResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetSectorStocks(ctx, req)
 }
 
-// MustNewClientWithBytedConfig creates a client for the service defined in IDL. It panics if any error occurs.
-func MustNewClientWithBytedConfig(destService string, config interface{}, opts ...client.Option) Client {
-	kc, err := NewClientWithBytedConfig(destService, config, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return kc
+func (p *kStockServiceClient) GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest, callOptions ...callopt.Option) (r *stock.GetDragonTigerListResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetDragonTigerList(ctx, req)
 }

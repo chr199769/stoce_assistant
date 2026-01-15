@@ -180,3 +180,218 @@ type SectorInfo struct {
 	TopStockName  string
 	TopStockCode  string
 }
+
+// --- Sector Details Support ---
+
+type SectorStocksResponse struct {
+	Rc   int `json:"rc"`
+	Data *struct {
+		Total int `json:"total"`
+		Diff  []struct {
+			Code          string  `json:"f12"`
+			Name          string  `json:"f14"`
+			Price         float64 `json:"f2"`
+			ChangePercent float64 `json:"f3"`
+			Volume        int64   `json:"f5"`
+			Amount        float64 `json:"f6"`
+			MarketCap     float64 `json:"f20"`
+		} `json:"diff"`
+	} `json:"data"`
+}
+
+type SectorStockItem struct {
+	Code          string
+	Name          string
+	Price         float64
+	ChangePercent float64
+	Volume        int64
+	Amount        float64
+	MarketCap     float64
+}
+
+func (c *Client) GetSectorStocksRaw(ctx context.Context, sectorCode string) ([]*SectorStockItem, error) {
+	fs := fmt.Sprintf("b:%s", sectorCode)
+	// Get top 100 stocks by change percent desc
+	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f5,f6,f20", fs)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result SectorStocksResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	if result.Data == nil {
+		return nil, fmt.Errorf("no data returned from eastmoney")
+	}
+
+	var stocks []*SectorStockItem
+	for _, item := range result.Data.Diff {
+		stocks = append(stocks, &SectorStockItem{
+			Code:          item.Code,
+			Name:          item.Name,
+			Price:         item.Price,
+			ChangePercent: item.ChangePercent,
+			Volume:        item.Volume,
+			Amount:        item.Amount,
+			MarketCap:     item.MarketCap,
+		})
+	}
+	return stocks, nil
+}
+
+// --- Dragon Tiger Support ---
+
+type DragonTigerListResponse struct {
+	Success bool `json:"success"`
+	Result  struct {
+		Data []struct {
+			SecurityCode    string  `json:"SECURITY_CODE"`
+			SecurityName    string  `json:"SECURITY_NAME_ABBR"`
+			ClosePrice      float64 `json:"CLOSE_PRICE"`
+			ChangeRate      float64 `json:"CHANGE_RATE"`
+			Explain         string  `json:"EXPLANATION"`
+			BillBoardNetAmt float64 `json:"BILLBOARD_NET_AMT"`
+		} `json:"data"`
+	} `json:"result"`
+}
+
+type DragonTigerSeatResponse struct {
+	Success bool `json:"success"`
+	Result  struct {
+		Data []struct {
+			OperatedeptName string  `json:"OPERATEDEPT_NAME"`
+			NetAmt          float64 `json:"NET"`
+			BuyAmt          float64 `json:"BUY"`
+			SellAmt         float64 `json:"SELL"`
+		} `json:"data"`
+	} `json:"result"`
+}
+
+// DragonTigerItem is an internal struct to match EastMoney Data
+type DragonTigerItem struct {
+	Code          string
+	Name          string
+	ClosePrice    float64
+	ChangePercent float64
+	Reason        string
+	NetInflow     float64
+	BuySeats      []*DragonTigerSeat
+	SellSeats     []*DragonTigerSeat
+}
+
+type DragonTigerSeat struct {
+	Name    string
+	BuyAmt  float64
+	SellAmt float64
+	NetAmt  float64
+	Tags    []string
+}
+
+func (c *Client) GetDragonTigerList(ctx context.Context, date string) ([]*DragonTigerItem, error) {
+	// RPT_DAILYBILLBOARD_DETAILS
+	url := fmt.Sprintf("https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DAILYBILLBOARD_DETAILS&columns=ALL&filter=(TRADE_DATE=%%27%s%%27)&pageNumber=1&pageSize=100&sortTypes=-1&sortColumns=BILLBOARD_NET_AMT", date)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result DragonTigerListResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("eastmoney api failed or no data")
+	}
+
+	var items []*DragonTigerItem
+	for _, d := range result.Result.Data {
+		items = append(items, &DragonTigerItem{
+			Code:          d.SecurityCode,
+			Name:          d.SecurityName,
+			ClosePrice:    d.ClosePrice,
+			ChangePercent: d.ChangeRate,
+			Reason:        d.Explain,
+			NetInflow:     d.BillBoardNetAmt,
+			BuySeats:      []*DragonTigerSeat{}, // Populated later
+			SellSeats:     []*DragonTigerSeat{},
+		})
+	}
+	return items, nil
+}
+
+func (c *Client) GetDragonTigerSeats(ctx context.Context, code, date string) ([]*DragonTigerSeat, []*DragonTigerSeat, error) {
+	// Buy Seats
+	urlBuy := fmt.Sprintf("https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_BILLBOARD_DAILYDETAILSBUY&columns=ALL&filter=(SECURITY_CODE=%%22%s%%22)(TRADE_DATE=%%27%s%%27)", code, date)
+	buySeats, err := c.fetchSeats(ctx, urlBuy)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Sell Seats
+	urlSell := fmt.Sprintf("https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_BILLBOARD_DAILYDETAILSSELL&columns=ALL&filter=(SECURITY_CODE=%%22%s%%22)(TRADE_DATE=%%27%s%%27)", code, date)
+	sellSeats, err := c.fetchSeats(ctx, urlSell)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return buySeats, sellSeats, nil
+}
+
+func (c *Client) fetchSeats(ctx context.Context, url string) ([]*DragonTigerSeat, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var result DragonTigerSeatResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+	var seats []*DragonTigerSeat
+	for _, s := range result.Result.Data {
+		seats = append(seats, &DragonTigerSeat{
+			Name:    s.OperatedeptName,
+			BuyAmt:  s.BuyAmt,
+			SellAmt: s.SellAmt,
+			NetAmt:  s.NetAmt,
+			Tags:    []string{}, // Populated by logic
+		})
+	}
+	return seats, nil
+}

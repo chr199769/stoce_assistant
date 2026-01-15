@@ -32,6 +32,17 @@ func Register(r *server.Hertz) {
 			_prediction.POST("/:code", append(_getpredictionMw(), api.GetPrediction)...)
 		}
 		{
+			_stock := _api.Group("/stock", _stockMw()...)
+			{
+				_dragontiger := _stock.Group("/dragontiger", _dragontigerMw()...)
+				_dragontiger.GET("/list", append(_getdragontigerlistMw(), api.GetDragonTigerList)...)
+			}
+			{
+				_sector := _stock.Group("/sector", _sectorMw()...)
+				_sector.GET("/stocks", append(_getsectorstocksMw(), api.GetSectorStocks)...)
+			}
+		}
+		{
 			_stocks := _api.Group("/stocks", _stocksMw()...)
 			{
 				_code := _stocks.Group("/:code", _codeMw()...)

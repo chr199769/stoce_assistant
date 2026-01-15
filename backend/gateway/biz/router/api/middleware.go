@@ -65,3 +65,28 @@ func _marketreviewMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _stockMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _dragontigerMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getdragontigerlistMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _sectorMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getsectorstocksMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

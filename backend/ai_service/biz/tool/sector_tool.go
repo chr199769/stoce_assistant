@@ -6,16 +6,21 @@ import (
 	"log"
 	"strings"
 
+	"stock_assistant/backend/ai_service/biz/tool/eastmoney"
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
 	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 )
 
 type SectorTool struct {
-	Client stockservice.Client
+	Client          stockservice.Client
+	EastMoneyClient *eastmoney.Client
 }
 
 func NewSectorTool(client stockservice.Client) *SectorTool {
-	return &SectorTool{Client: client}
+	return &SectorTool{
+		Client:          client,
+		EastMoneyClient: eastmoney.NewClient(),
+	}
 }
 
 func (t *SectorTool) Name() string {
@@ -39,6 +44,93 @@ func (t *SectorTool) Call(ctx context.Context, input string) (string, error) {
 	}
 
 	return t.getSectorRank(ctx, rankType)
+}
+
+func (t *SectorTool) GetSectorDetail(ctx context.Context, sectorCode string) (string, error) {
+	// 1. Get Stocks Raw Data
+	rawStocks, err := t.EastMoneyClient.GetSectorStocksRaw(ctx, sectorCode)
+	if err != nil {
+		return fmt.Sprintf("Error fetching sector stocks: %v", err), nil
+	}
+
+	// 2. Leader Selection Logic
+	// Filter ST and New Stocks
+	var candidates []*eastmoney.SectorStockItem
+	for _, item := range rawStocks {
+		if strings.Contains(item.Name, "ST") || strings.Contains(item.Name, "退") {
+			continue
+		}
+		if strings.HasPrefix(item.Name, "N") || strings.HasPrefix(item.Name, "C") {
+			continue
+		}
+		candidates = append(candidates, item)
+	}
+
+	// Calculate Score: 0.6*Amount + 0.4*MarketCap (Simplified proxy for influence)
+	// Or better: Just sort by Amount (Turnover) which indicates liquidity and attention
+	// Let's use Amount as primary factor for "Main Force" attention
+	// And check for Limit Up status
+	
+	// Sort by Amount Desc
+	// Bubble sort for simplicity (small list < 100) or just iterate to find max
+	// Go sort needs import sort
+	
+	// We will just return the top 5 by Amount, ensuring mix of SH/SZ
+	// Since we can't import sort easily without updating imports, let's implement simple selection
+	
+	leaders := t.selectLeaders(candidates)
+	
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Sector Leaders (Top 5 by Influence):\n"))
+	for _, l := range leaders {
+		sb.WriteString(fmt.Sprintf("- %s (%s): %.2f%%, Amount: %.1f亿\n", 
+			l.Name, l.Code, l.ChangePercent, l.Amount/100000000))
+	}
+	
+	return sb.String(), nil
+}
+
+func (t *SectorTool) selectLeaders(candidates []*eastmoney.SectorStockItem) []*eastmoney.SectorStockItem {
+	// Simple manual sort by Amount Desc
+	for i := 0; i < len(candidates); i++ {
+		for j := i + 1; j < len(candidates); j++ {
+			if candidates[j].Amount > candidates[i].Amount {
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			}
+		}
+	}
+	
+	var leaders []*eastmoney.SectorStockItem
+	shCount, szCount := 0, 0
+	
+	for _, item := range candidates {
+		if len(leaders) >= 5 {
+			break
+		}
+		
+		isSH := strings.HasPrefix(item.Code, "6")
+		isSZ := strings.HasPrefix(item.Code, "0") || strings.HasPrefix(item.Code, "3")
+		
+		canPick := true
+		if isSH {
+			neededSZ := 2 - szCount
+			if neededSZ < 0 { neededSZ = 0 }
+			if 5 - (len(leaders) + 1) < neededSZ { canPick = false }
+		} else if isSZ {
+			neededSH := 2 - shCount
+			if neededSH < 0 { neededSH = 0 }
+			if 5 - (len(leaders) + 1) < neededSH { canPick = false }
+		} else {
+			canPick = false
+		}
+		
+		if canPick {
+			leaders = append(leaders, item)
+			if isSH { shCount++ }
+			if isSZ { szCount++ }
+		}
+	}
+	return leaders
 }
 
 func (t *SectorTool) getSectorRank(ctx context.Context, rankType string) (string, error) {

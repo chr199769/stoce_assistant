@@ -107,7 +107,8 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 	marketTool := tool.NewMarketInfoTool()
 	analysisTool := tool.NewStockAnalysisTool()
 	sectorTool := tool.NewSectorTool(p.stockClient)
-	t := []tools.Tool{stockTool, marketTool, analysisTool, sectorTool}
+	dtTool := tool.NewDragonTigerTool()
+	t := []tools.Tool{stockTool, marketTool, analysisTool, sectorTool, dtTool}
 
 	// Pre-fetch stock data to ensure accuracy and avoid tool calling failures
 	stockData, err := stockTool.Call(ctx, stockCode)
@@ -120,6 +121,10 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 	marketInfo, _ := marketTool.Call(ctx, stockCode)
 
 	analysisData, _ := analysisTool.Call(ctx, stockCode)
+
+	// Pre-fetch Macro Context
+	sectorContext, _ := sectorTool.Call(ctx, "industry")
+	dtContext, _ := dtTool.Call(ctx, "") // Get today's general list
 
 	// 4. Create Agent
 	// ZeroShotReactDescription is good for general purpose tool use
@@ -163,28 +168,38 @@ Here is the real-time data for the stock:
 (Includes Recent Stock News, Dragon & Tiger Status, Social Trends, and General Market/Policy News)
 %s
 
+[Macro & Hot Money Context]
+(Includes Top Industries and Today's Dragon Tiger List Overview)
+[Top Industries]:
+%s
+
+[Today's Hot Money (Dragon Tiger List)]:
+%s
+
 Process (Professional Trader Logic):
 1. **Time Context Check**:
 %s
 
 2. **Policy & Macro (The "Sky")**:
-   - Identify if the stock aligns with current national strategic directions (e.g., "New Quality Productive Forces", "Low-Altitude Economy").
-   - Policy-supported sectors enjoy valuation premiums; suppressed ones must be avoided.
+   - Identify if the stock aligns with current national strategic directions.
+   - Check if the stock's industry is in the [Top Industries] list. If yes, it's a "Main Line" stock (High Potential).
+   - Policy-supported sectors enjoy valuation premiums.
 
 3. **Funds & Chips (The "Ground")**:
-   - **Dragon Tiger List**: Analyze if institutional or speculative funds are active.
-   - **Chip Distribution**: Check "Winner Rate" and "Cost Range". Is the main force accumulating (low cost) or distributing (high cost)?
-   - **Order Book**: Analyze intraday pressure (Total Pending Buy/Sell).
+   - **Dragon Tiger List**: 
+     - Check if the stock is on [Today's Hot Money] list.
+     - Check "Dragon Tiger List History" in [Advanced Analysis Data].
+     - Identify if "Hot Money" (e.g., Zhao Laoge, Lasa Tiantuan) or "Institutions" are buying.
+   - **Chip Distribution**: Check "Winner Rate" and "Cost Range".
+   - **Order Book**: Analyze intraday pressure.
 
 4. **Sentiment & Psychology (The "People")**:
-   - **Stock Heat (Guba Rank)**: 
-     - Rank soaring (e.g., >500 -> Top 20) = High potential for short-term explosion.
-     - Consistently Top 10 = Overheated, risk of correction (reverse thinking).
-   - Use "Sheep Flock Effect" logic: Enter at divergence, exit at consensus.
+   - **Stock Heat (Guba Rank)**: Rank soaring = Short-term explosion.
+   - **Sector Resonance**: Does the stock move with its sector leaders?
 
 5. **Risk Control (The "Shield" - MANDATORY CHECK)**:
-   - **Regulatory Notices**: Check [Regulatory Notices]. If there are recent "Inquiry Letters" (问询函) or "Regulatory Letters" (监管函), this is a **VETO** signal (High Risk).
-   - **Volatility Rules**: If the stock has risen >100%% in 10 days, warn about "Special Suspension" (停牌核查) risk.
+   - **Regulatory Notices**: Check for Inquiry Letters/Regulatory Letters.
+   - **Volatility Rules**: Check for recent abnormal fluctuations.
 
 6. **Prediction**:
    - Provide a prediction for the trend (Up, Down, Neutral) for BOTH the %s.
@@ -193,16 +208,16 @@ Process (Professional Trader Logic):
 7. **Conclusion**: Summarize the key logic using the "Trader's Perspective".
 
 Output requirements:
-- **Language**: The final answer MUST be in Chinese (Simplified Chinese). ALL headers and labels MUST be in Chinese.
-- **Tone**: Professional, objective, insightful (like a senior trader).
+- **Language**: The final answer MUST be in Chinese (Simplified Chinese).
+- **Tone**: Professional, objective, insightful.
 - **Structure**:
   - 股票名称与代码
   - 当前价格与状态
   - 时间背景: %s
   - **核心逻辑分析**:
-    - 🏛️ 政策与宏观 (天时)
-    - 💰 资金与筹码 (地利) - 包含盘口分析
-    - 🗣️ 情绪与心理 (人和) - 包含个股热度
+    - 🏛️ 政策与宏观 (天时) - 包含板块效应分析
+    - 💰 资金与筹码 (地利) - 包含龙虎榜游资分析
+    - 🗣️ 情绪与心理 (人和) - 包含个股热度与联动
   - **风控评估 (风控)**: 监管与波动率检查
   - **走势预测 (%s)**: [趋势] - [理由]
   - 置信度评分: [0-1]
@@ -221,7 +236,7 @@ Final Answer:
 {"confidence": 0.85, "news_summary": "Policy support for low-altitude economy and 5G drives positive outlook despite short-term selling pressure."}
 
 Output your final answer starting with "Final Answer:", followed by the detailed analysis in Chinese, and then the metadata block.
-`, stockCode, time.Now().Format("2006-01-02 15:04:05"), tradingStatusStr, stockData, analysisData, marketInfo, timeContextInstruction, predictionFocus, tradingStatusStr, predictionFocus)
+`, stockCode, time.Now().Format("2006-01-02 15:04:05"), tradingStatusStr, stockData, analysisData, marketInfo, sectorContext, dtContext, timeContextInstruction, predictionFocus, tradingStatusStr, predictionFocus)
 
 	res, err := chains.Run(ctx, executor, input)
 	if err != nil {
@@ -433,7 +448,7 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 	return stocks, nil
 }
 
-func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, date string) (*ai.MarketReviewResponse, error) {
+func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, dragonTigerList []*stock.DragonTigerItem, date string) (*ai.MarketReviewResponse, error) {
 	// 1. Determine ModelConfig
 	var cfg ModelConfig
 	if p.fileConfig != nil {
@@ -476,6 +491,24 @@ func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.S
 		limitUpSummary.WriteString(fmt.Sprintf("- %s: %s, %s, %s\n", s.Name, s.LimitUpType, s.Reason, s.ChangePercent))
 	}
 
+	var dtSummary strings.Builder
+	dtSummary.WriteString(fmt.Sprintf("Dragon Tiger List (Top 5 Net Buy):\n"))
+	for i, item := range dragonTigerList {
+		if i >= 5 {
+			break
+		}
+		dtSummary.WriteString(fmt.Sprintf("- %s: +%.2f%%, Net: %.1f Wan, Reason: %s\n", item.Name, item.ChangePercent, item.NetInflow/10000, item.Reason))
+		// Add seats if available (Top 3)
+		if len(item.BuySeats) > 0 {
+			dtSummary.WriteString("  [Buy Seats]: ")
+			for k, seat := range item.BuySeats {
+				if k >= 2 { break }
+				dtSummary.WriteString(fmt.Sprintf("%s(%.0f), ", seat.Name, seat.NetAmt/10000))
+			}
+			dtSummary.WriteString("\n")
+		}
+	}
+
 	// 4. Create Prompt
 	prompt := fmt.Sprintf(`You are an expert Stock Market Analyst.
 Your task is to provide a comprehensive "Market Review" (复盘) for the A-share market on %s.
@@ -488,14 +521,18 @@ Here is the market data:
 [Limit-Up (Sentiment) Data]
 %s
 
+[Dragon Tiger List (Hot Money)]
+%s
+
 Please analyze the data and generate a structured review in Chinese (Simplified).
 
 Structure:
 1. **Market Summary (市场总览)**: A brief summary of today's market emotion and main themes.
 2. **Sector Analysis (板块分析)**: Which sectors are strong? Is there a clear main line? Where is the money flowing?
 3. **Sentiment Analysis (情绪分析)**: Analyze the limit-up pool. Is the sentiment heating up or cooling down? Are there high-space stocks (连板高度)?
-4. **Risks (风险提示)**: Any potential risks based on the data?
-5. **Opportunities (明日机会)**: Based on today's rotation, what to look for tomorrow?
+4. **Hot Money Analysis (游资动向)**: Based on Dragon Tiger List, where are the active funds?
+5. **Risks (风险提示)**: Any potential risks based on the data?
+6. **Opportunities (明日机会)**: Based on today's rotation, what to look for tomorrow?
 
 Output ONLY a JSON object with the following fields:
 {
@@ -507,7 +544,7 @@ Output ONLY a JSON object with the following fields:
 }
 
 Ensure the response is valid JSON. Do not include markdown formatting like `+"```json"+`.
-`, date, sectorSummary.String(), limitUpSummary.String())
+`, date, sectorSummary.String(), limitUpSummary.String(), dtSummary.String())
 
 	messages := []llms.MessageContent{
 		{

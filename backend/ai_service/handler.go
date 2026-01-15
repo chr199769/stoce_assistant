@@ -126,8 +126,19 @@ func (s *AIServiceImpl) MarketReview(ctx context.Context, req *ai.MarketReviewRe
 		return nil, err
 	}
 
-	// 3. Call LLM Provider
-	review, err := s.llmProvider.ReviewMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, req.Date)
+	// 3. Fetch Dragon Tiger List
+	dtReq := &stock.GetDragonTigerListRequest{
+		Date: req.Date,
+	}
+	dtResp, err := s.stockClient.GetDragonTigerList(ctx, dtReq)
+	if err != nil {
+		log.Printf("Failed to get dragon tiger list: %v", err)
+		// Don't fail the whole request, just log and pass nil/empty
+		dtResp = &stock.GetDragonTigerListResponse{}
+	}
+
+	// 4. Call LLM Provider
+	review, err := s.llmProvider.ReviewMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, dtResp.Items, req.Date)
 	if err != nil {
 		log.Printf("Failed to generate market review: %v", err)
 		return nil, err

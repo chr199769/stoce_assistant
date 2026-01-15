@@ -1,5 +1,14 @@
 import client from './client';
-import { RealtimeResponse, PredictionResponse, PredictionRequest, ImageRecognitionResponse } from '../types';
+import {
+  RealtimeResponse,
+  PredictionResponse,
+  PredictionRequest,
+  ImageRecognitionResponse,
+  MarketReviewRequest,
+  MarketReviewResponse,
+  GetSectorStocksResponse,
+  GetDragonTigerListResponse
+} from '../types';
 
 export const getRealtime = async (code: string): Promise<RealtimeResponse> => {
   const response = await client.get<RealtimeResponse>(`/api/stocks/${code}/realtime`);
@@ -37,5 +46,15 @@ export const marketReview = async (req: MarketReviewRequest): Promise<MarketRevi
     date: req.date,
     focus_sectors: req.focus_sectors,
   });
+  return response.data;
+};
+
+export const getSectorStocks = async (sectorCode: string): Promise<GetSectorStocksResponse> => {
+  const response = await client.get<GetSectorStocksResponse>(`/api/stock/sector/stocks?sector_code=${sectorCode}`);
+  return response.data;
+};
+
+export const getDragonTigerList = async (date: string): Promise<GetDragonTigerListResponse> => {
+  const response = await client.get<GetDragonTigerListResponse>(`/api/stock/dragontiger/list?date=${date}`);
   return response.data;
 };
