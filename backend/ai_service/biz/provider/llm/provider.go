@@ -10,4 +10,5 @@ type Provider interface {
 	Predict(ctx context.Context, stockCode string, days int32, modelName string) (string, float64, string, error)
 	RecognizeImage(ctx context.Context, imageData []byte, modelName string) ([]*ai.RecognizedStock, error)
 	ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, dragonTigerList []*stock.DragonTigerItem, date string) (*ai.MarketReviewResponse, error)
+	AnalyzeMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, dragonTigerList []*stock.DragonTigerItem, date string) (*ai.MarketAnalysisResponse, error)
 }

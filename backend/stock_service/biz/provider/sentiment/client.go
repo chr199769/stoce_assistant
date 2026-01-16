@@ -85,17 +85,9 @@ func (c *Client) GetLimitUpPool(ctx context.Context) ([]*LimitUpStock, error) {
 	}
 	
 	if result.Data == nil || result.Rc != 0 {
-		// Try to parse as raw generic map to see what's wrong if we were debugging,
-		// but here we just return error.
-		// return nil, fmt.Errorf("sentiment api returned error code: %d", result.Rc)
-		
-		// FALLBACK MOCK for demo purposes if API fails (e.g. invalid token)
-		fmt.Printf("Warning: Sentiment API failed (rc=%d), using mock data.\n", result.Rc)
-		return []*LimitUpStock{
-			{Code: "600519", Name: "贵州茅台", Price: 1750.0, ChangePercent: 10.0, LimitUpType: "首板", Reason: "大消费"},
-			{Code: "300750", Name: "宁德时代", Price: 180.0, ChangePercent: 20.0, LimitUpType: "2连板", Reason: "新能源"},
-			{Code: "002594", Name: "比亚迪", Price: 250.0, ChangePercent: 10.0, LimitUpType: "首板", Reason: "汽车"},
-		}, nil
+		// Log the error but return empty list instead of misleading mock data
+		fmt.Printf("Warning: Sentiment API failed (rc=%d), returning empty list.\n", result.Rc)
+		return []*LimitUpStock{}, nil
 	}
 
 	var stocks []*LimitUpStock

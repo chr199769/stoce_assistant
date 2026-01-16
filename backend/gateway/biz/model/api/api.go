@@ -2382,9 +2382,11 @@ func (p *MarketReviewRequest) String() string {
 }
 
 type MarketReviewResponse struct {
-	Summary    string  `thrift:"summary,1" form:"summary" json:"summary" query:"summary"`
-	Confidence float64 `thrift:"confidence,2" form:"confidence" json:"confidence" query:"confidence"`
-	Date       string  `thrift:"date,3" form:"date" json:"date" query:"date"`
+	Summary           string   `thrift:"summary,1" form:"summary" json:"summary" query:"summary"`
+	SectorAnalysis    string   `thrift:"sector_analysis,2" form:"sector_analysis" json:"sector_analysis" query:"sector_analysis"`
+	SentimentAnalysis string   `thrift:"sentiment_analysis,3" form:"sentiment_analysis" json:"sentiment_analysis" query:"sentiment_analysis"`
+	KeyRisks          []string `thrift:"key_risks,4,default,list<string>" form:"key_risks" json:"key_risks" query:"key_risks"`
+	Opportunities     []string `thrift:"opportunities,5,default,list<string>" form:"opportunities" json:"opportunities" query:"opportunities"`
 }
 
 func NewMarketReviewResponse() *MarketReviewResponse {
@@ -2398,18 +2400,28 @@ func (p *MarketReviewResponse) GetSummary() (v string) {
 	return p.Summary
 }
 
-func (p *MarketReviewResponse) GetConfidence() (v float64) {
-	return p.Confidence
+func (p *MarketReviewResponse) GetSectorAnalysis() (v string) {
+	return p.SectorAnalysis
 }
 
-func (p *MarketReviewResponse) GetDate() (v string) {
-	return p.Date
+func (p *MarketReviewResponse) GetSentimentAnalysis() (v string) {
+	return p.SentimentAnalysis
+}
+
+func (p *MarketReviewResponse) GetKeyRisks() (v []string) {
+	return p.KeyRisks
+}
+
+func (p *MarketReviewResponse) GetOpportunities() (v []string) {
+	return p.Opportunities
 }
 
 var fieldIDToName_MarketReviewResponse = map[int16]string{
 	1: "summary",
-	2: "confidence",
-	3: "date",
+	2: "sector_analysis",
+	3: "sentiment_analysis",
+	4: "key_risks",
+	5: "opportunities",
 }
 
 func (p *MarketReviewResponse) Read(iprot thrift.TProtocol) (err error) {
@@ -2440,7 +2452,7 @@ func (p *MarketReviewResponse) Read(iprot thrift.TProtocol) (err error) {
 				goto SkipFieldError
 			}
 		case 2:
-			if fieldTypeId == thrift.DOUBLE {
+			if fieldTypeId == thrift.STRING {
 				if err = p.ReadField2(iprot); err != nil {
 					goto ReadFieldError
 				}
@@ -2450,6 +2462,22 @@ func (p *MarketReviewResponse) Read(iprot thrift.TProtocol) (err error) {
 		case 3:
 			if fieldTypeId == thrift.STRING {
 				if err = p.ReadField3(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 4:
+			if fieldTypeId == thrift.LIST {
+				if err = p.ReadField4(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 5:
+			if fieldTypeId == thrift.LIST {
+				if err = p.ReadField5(iprot); err != nil {
 					goto ReadFieldError
 				}
 			} else if err = iprot.Skip(fieldTypeId); err != nil {
@@ -2497,13 +2525,13 @@ func (p *MarketReviewResponse) ReadField1(iprot thrift.TProtocol) error {
 }
 func (p *MarketReviewResponse) ReadField2(iprot thrift.TProtocol) error {
 
-	var _field float64
-	if v, err := iprot.ReadDouble(); err != nil {
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
 		return err
 	} else {
 		_field = v
 	}
-	p.Confidence = _field
+	p.SectorAnalysis = _field
 	return nil
 }
 func (p *MarketReviewResponse) ReadField3(iprot thrift.TProtocol) error {
@@ -2514,7 +2542,53 @@ func (p *MarketReviewResponse) ReadField3(iprot thrift.TProtocol) error {
 	} else {
 		_field = v
 	}
-	p.Date = _field
+	p.SentimentAnalysis = _field
+	return nil
+}
+func (p *MarketReviewResponse) ReadField4(iprot thrift.TProtocol) error {
+	_, size, err := iprot.ReadListBegin()
+	if err != nil {
+		return err
+	}
+	_field := make([]string, 0, size)
+	for i := 0; i < size; i++ {
+
+		var _elem string
+		if v, err := iprot.ReadString(); err != nil {
+			return err
+		} else {
+			_elem = v
+		}
+
+		_field = append(_field, _elem)
+	}
+	if err := iprot.ReadListEnd(); err != nil {
+		return err
+	}
+	p.KeyRisks = _field
+	return nil
+}
+func (p *MarketReviewResponse) ReadField5(iprot thrift.TProtocol) error {
+	_, size, err := iprot.ReadListBegin()
+	if err != nil {
+		return err
+	}
+	_field := make([]string, 0, size)
+	for i := 0; i < size; i++ {
+
+		var _elem string
+		if v, err := iprot.ReadString(); err != nil {
+			return err
+		} else {
+			_elem = v
+		}
+
+		_field = append(_field, _elem)
+	}
+	if err := iprot.ReadListEnd(); err != nil {
+		return err
+	}
+	p.Opportunities = _field
 	return nil
 }
 
@@ -2534,6 +2608,14 @@ func (p *MarketReviewResponse) Write(oprot thrift.TProtocol) (err error) {
 		}
 		if err = p.writeField3(oprot); err != nil {
 			fieldId = 3
+			goto WriteFieldError
+		}
+		if err = p.writeField4(oprot); err != nil {
+			fieldId = 4
+			goto WriteFieldError
+		}
+		if err = p.writeField5(oprot); err != nil {
+			fieldId = 5
 			goto WriteFieldError
 		}
 	}
@@ -2572,10 +2654,10 @@ WriteFieldEndError:
 }
 
 func (p *MarketReviewResponse) writeField2(oprot thrift.TProtocol) (err error) {
-	if err = oprot.WriteFieldBegin("confidence", thrift.DOUBLE, 2); err != nil {
+	if err = oprot.WriteFieldBegin("sector_analysis", thrift.STRING, 2); err != nil {
 		goto WriteFieldBeginError
 	}
-	if err := oprot.WriteDouble(p.Confidence); err != nil {
+	if err := oprot.WriteString(p.SectorAnalysis); err != nil {
 		return err
 	}
 	if err = oprot.WriteFieldEnd(); err != nil {
@@ -2589,10 +2671,10 @@ WriteFieldEndError:
 }
 
 func (p *MarketReviewResponse) writeField3(oprot thrift.TProtocol) (err error) {
-	if err = oprot.WriteFieldBegin("date", thrift.STRING, 3); err != nil {
+	if err = oprot.WriteFieldBegin("sentiment_analysis", thrift.STRING, 3); err != nil {
 		goto WriteFieldBeginError
 	}
-	if err := oprot.WriteString(p.Date); err != nil {
+	if err := oprot.WriteString(p.SentimentAnalysis); err != nil {
 		return err
 	}
 	if err = oprot.WriteFieldEnd(); err != nil {
@@ -2605,11 +2687,605 @@ WriteFieldEndError:
 	return thrift.PrependError(fmt.Sprintf("%T write field 3 end error: ", p), err)
 }
 
+func (p *MarketReviewResponse) writeField4(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("key_risks", thrift.LIST, 4); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteListBegin(thrift.STRING, len(p.KeyRisks)); err != nil {
+		return err
+	}
+	for _, v := range p.KeyRisks {
+		if err := oprot.WriteString(v); err != nil {
+			return err
+		}
+	}
+	if err := oprot.WriteListEnd(); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 end error: ", p), err)
+}
+
+func (p *MarketReviewResponse) writeField5(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("opportunities", thrift.LIST, 5); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteListBegin(thrift.STRING, len(p.Opportunities)); err != nil {
+		return err
+	}
+	for _, v := range p.Opportunities {
+		if err := oprot.WriteString(v); err != nil {
+			return err
+		}
+	}
+	if err := oprot.WriteListEnd(); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 5 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 5 end error: ", p), err)
+}
+
 func (p *MarketReviewResponse) String() string {
 	if p == nil {
 		return "<nil>"
 	}
 	return fmt.Sprintf("MarketReviewResponse(%+v)", *p)
+
+}
+
+type MarketAnalysisRequest struct {
+	Date string `thrift:"date,1" form:"date" json:"date"`
+}
+
+func NewMarketAnalysisRequest() *MarketAnalysisRequest {
+	return &MarketAnalysisRequest{}
+}
+
+func (p *MarketAnalysisRequest) InitDefault() {
+}
+
+func (p *MarketAnalysisRequest) GetDate() (v string) {
+	return p.Date
+}
+
+var fieldIDToName_MarketAnalysisRequest = map[int16]string{
+	1: "date",
+}
+
+func (p *MarketAnalysisRequest) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_MarketAnalysisRequest[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *MarketAnalysisRequest) ReadField1(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.Date = _field
+	return nil
+}
+
+func (p *MarketAnalysisRequest) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("MarketAnalysisRequest"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *MarketAnalysisRequest) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("date", thrift.STRING, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.Date); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *MarketAnalysisRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MarketAnalysisRequest(%+v)", *p)
+
+}
+
+type MarketAnalysisResponse struct {
+	HotStocks         []string `thrift:"hot_stocks,1,default,list<string>" form:"hot_stocks" json:"hot_stocks" query:"hot_stocks"`
+	RecommendedStocks []string `thrift:"recommended_stocks,2,default,list<string>" form:"recommended_stocks" json:"recommended_stocks" query:"recommended_stocks"`
+	Risks             []string `thrift:"risks,3,default,list<string>" form:"risks" json:"risks" query:"risks"`
+	Opportunities     []string `thrift:"opportunities,4,default,list<string>" form:"opportunities" json:"opportunities" query:"opportunities"`
+	AnalysisSummary   string   `thrift:"analysis_summary,5" form:"analysis_summary" json:"analysis_summary" query:"analysis_summary"`
+}
+
+func NewMarketAnalysisResponse() *MarketAnalysisResponse {
+	return &MarketAnalysisResponse{}
+}
+
+func (p *MarketAnalysisResponse) InitDefault() {
+}
+
+func (p *MarketAnalysisResponse) GetHotStocks() (v []string) {
+	return p.HotStocks
+}
+
+func (p *MarketAnalysisResponse) GetRecommendedStocks() (v []string) {
+	return p.RecommendedStocks
+}
+
+func (p *MarketAnalysisResponse) GetRisks() (v []string) {
+	return p.Risks
+}
+
+func (p *MarketAnalysisResponse) GetOpportunities() (v []string) {
+	return p.Opportunities
+}
+
+func (p *MarketAnalysisResponse) GetAnalysisSummary() (v string) {
+	return p.AnalysisSummary
+}
+
+var fieldIDToName_MarketAnalysisResponse = map[int16]string{
+	1: "hot_stocks",
+	2: "recommended_stocks",
+	3: "risks",
+	4: "opportunities",
+	5: "analysis_summary",
+}
+
+func (p *MarketAnalysisResponse) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.LIST {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 2:
+			if fieldTypeId == thrift.LIST {
+				if err = p.ReadField2(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 3:
+			if fieldTypeId == thrift.LIST {
+				if err = p.ReadField3(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 4:
+			if fieldTypeId == thrift.LIST {
+				if err = p.ReadField4(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 5:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField5(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_MarketAnalysisResponse[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *MarketAnalysisResponse) ReadField1(iprot thrift.TProtocol) error {
+	_, size, err := iprot.ReadListBegin()
+	if err != nil {
+		return err
+	}
+	_field := make([]string, 0, size)
+	for i := 0; i < size; i++ {
+
+		var _elem string
+		if v, err := iprot.ReadString(); err != nil {
+			return err
+		} else {
+			_elem = v
+		}
+
+		_field = append(_field, _elem)
+	}
+	if err := iprot.ReadListEnd(); err != nil {
+		return err
+	}
+	p.HotStocks = _field
+	return nil
+}
+func (p *MarketAnalysisResponse) ReadField2(iprot thrift.TProtocol) error {
+	_, size, err := iprot.ReadListBegin()
+	if err != nil {
+		return err
+	}
+	_field := make([]string, 0, size)
+	for i := 0; i < size; i++ {
+
+		var _elem string
+		if v, err := iprot.ReadString(); err != nil {
+			return err
+		} else {
+			_elem = v
+		}
+
+		_field = append(_field, _elem)
+	}
+	if err := iprot.ReadListEnd(); err != nil {
+		return err
+	}
+	p.RecommendedStocks = _field
+	return nil
+}
+func (p *MarketAnalysisResponse) ReadField3(iprot thrift.TProtocol) error {
+	_, size, err := iprot.ReadListBegin()
+	if err != nil {
+		return err
+	}
+	_field := make([]string, 0, size)
+	for i := 0; i < size; i++ {
+
+		var _elem string
+		if v, err := iprot.ReadString(); err != nil {
+			return err
+		} else {
+			_elem = v
+		}
+
+		_field = append(_field, _elem)
+	}
+	if err := iprot.ReadListEnd(); err != nil {
+		return err
+	}
+	p.Risks = _field
+	return nil
+}
+func (p *MarketAnalysisResponse) ReadField4(iprot thrift.TProtocol) error {
+	_, size, err := iprot.ReadListBegin()
+	if err != nil {
+		return err
+	}
+	_field := make([]string, 0, size)
+	for i := 0; i < size; i++ {
+
+		var _elem string
+		if v, err := iprot.ReadString(); err != nil {
+			return err
+		} else {
+			_elem = v
+		}
+
+		_field = append(_field, _elem)
+	}
+	if err := iprot.ReadListEnd(); err != nil {
+		return err
+	}
+	p.Opportunities = _field
+	return nil
+}
+func (p *MarketAnalysisResponse) ReadField5(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.AnalysisSummary = _field
+	return nil
+}
+
+func (p *MarketAnalysisResponse) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("MarketAnalysisResponse"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+		if err = p.writeField2(oprot); err != nil {
+			fieldId = 2
+			goto WriteFieldError
+		}
+		if err = p.writeField3(oprot); err != nil {
+			fieldId = 3
+			goto WriteFieldError
+		}
+		if err = p.writeField4(oprot); err != nil {
+			fieldId = 4
+			goto WriteFieldError
+		}
+		if err = p.writeField5(oprot); err != nil {
+			fieldId = 5
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *MarketAnalysisResponse) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("hot_stocks", thrift.LIST, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteListBegin(thrift.STRING, len(p.HotStocks)); err != nil {
+		return err
+	}
+	for _, v := range p.HotStocks {
+		if err := oprot.WriteString(v); err != nil {
+			return err
+		}
+	}
+	if err := oprot.WriteListEnd(); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *MarketAnalysisResponse) writeField2(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("recommended_stocks", thrift.LIST, 2); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteListBegin(thrift.STRING, len(p.RecommendedStocks)); err != nil {
+		return err
+	}
+	for _, v := range p.RecommendedStocks {
+		if err := oprot.WriteString(v); err != nil {
+			return err
+		}
+	}
+	if err := oprot.WriteListEnd(); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 2 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 2 end error: ", p), err)
+}
+
+func (p *MarketAnalysisResponse) writeField3(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("risks", thrift.LIST, 3); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteListBegin(thrift.STRING, len(p.Risks)); err != nil {
+		return err
+	}
+	for _, v := range p.Risks {
+		if err := oprot.WriteString(v); err != nil {
+			return err
+		}
+	}
+	if err := oprot.WriteListEnd(); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 end error: ", p), err)
+}
+
+func (p *MarketAnalysisResponse) writeField4(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("opportunities", thrift.LIST, 4); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteListBegin(thrift.STRING, len(p.Opportunities)); err != nil {
+		return err
+	}
+	for _, v := range p.Opportunities {
+		if err := oprot.WriteString(v); err != nil {
+			return err
+		}
+	}
+	if err := oprot.WriteListEnd(); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 end error: ", p), err)
+}
+
+func (p *MarketAnalysisResponse) writeField5(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("analysis_summary", thrift.STRING, 5); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.AnalysisSummary); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 5 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 5 end error: ", p), err)
+}
+
+func (p *MarketAnalysisResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MarketAnalysisResponse(%+v)", *p)
 
 }
 
@@ -4485,6 +5161,8 @@ type StockAPI interface {
 	GetFinancialReport(ctx context.Context, req *GetFinancialReportRequest) (r *GetFinancialReportResponse, err error)
 
 	MarketReview(ctx context.Context, req *MarketReviewRequest) (r *MarketReviewResponse, err error)
+
+	AnalyzeMarket(ctx context.Context, req *MarketAnalysisRequest) (r *MarketAnalysisResponse, err error)
 	// Phase 2: Sector Details & Dragon Tiger List
 	GetSectorStocks(ctx context.Context, req *GetSectorStocksRequest) (r *GetSectorStocksResponse, err error)
 
@@ -4562,6 +5240,15 @@ func (p *StockAPIClient) MarketReview(ctx context.Context, req *MarketReviewRequ
 	}
 	return _result.GetSuccess(), nil
 }
+func (p *StockAPIClient) AnalyzeMarket(ctx context.Context, req *MarketAnalysisRequest) (r *MarketAnalysisResponse, err error) {
+	var _args StockAPIAnalyzeMarketArgs
+	_args.Req = req
+	var _result StockAPIAnalyzeMarketResult
+	if err = p.Client_().Call(ctx, "AnalyzeMarket", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
 func (p *StockAPIClient) GetSectorStocks(ctx context.Context, req *GetSectorStocksRequest) (r *GetSectorStocksResponse, err error) {
 	var _args StockAPIGetSectorStocksArgs
 	_args.Req = req
@@ -4606,6 +5293,7 @@ func NewStockAPIProcessor(handler StockAPI) *StockAPIProcessor {
 	self.AddToProcessorMap("RecognizeStockImage", &stockAPIProcessorRecognizeStockImage{handler: handler})
 	self.AddToProcessorMap("GetFinancialReport", &stockAPIProcessorGetFinancialReport{handler: handler})
 	self.AddToProcessorMap("MarketReview", &stockAPIProcessorMarketReview{handler: handler})
+	self.AddToProcessorMap("AnalyzeMarket", &stockAPIProcessorAnalyzeMarket{handler: handler})
 	self.AddToProcessorMap("GetSectorStocks", &stockAPIProcessorGetSectorStocks{handler: handler})
 	self.AddToProcessorMap("GetDragonTigerList", &stockAPIProcessorGetDragonTigerList{handler: handler})
 	return self
@@ -4851,6 +5539,54 @@ func (p *stockAPIProcessorMarketReview) Process(ctx context.Context, seqId int32
 		result.Success = retval
 	}
 	if err2 = oprot.WriteMessageBegin("MarketReview", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type stockAPIProcessorAnalyzeMarket struct {
+	handler StockAPI
+}
+
+func (p *stockAPIProcessorAnalyzeMarket) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := StockAPIAnalyzeMarketArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("AnalyzeMarket", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := StockAPIAnalyzeMarketResult{}
+	var retval *MarketAnalysisResponse
+	if retval, err2 = p.handler.AnalyzeMarket(ctx, args.Req); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing AnalyzeMarket: "+err2.Error())
+		oprot.WriteMessageBegin("AnalyzeMarket", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("AnalyzeMarket", thrift.REPLY, seqId); err2 != nil {
 		err = err2
 	}
 	if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -6431,6 +7167,300 @@ func (p *StockAPIMarketReviewResult) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("StockAPIMarketReviewResult(%+v)", *p)
+
+}
+
+type StockAPIAnalyzeMarketArgs struct {
+	Req *MarketAnalysisRequest `thrift:"req,1"`
+}
+
+func NewStockAPIAnalyzeMarketArgs() *StockAPIAnalyzeMarketArgs {
+	return &StockAPIAnalyzeMarketArgs{}
+}
+
+func (p *StockAPIAnalyzeMarketArgs) InitDefault() {
+}
+
+var StockAPIAnalyzeMarketArgs_Req_DEFAULT *MarketAnalysisRequest
+
+func (p *StockAPIAnalyzeMarketArgs) GetReq() (v *MarketAnalysisRequest) {
+	if !p.IsSetReq() {
+		return StockAPIAnalyzeMarketArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+var fieldIDToName_StockAPIAnalyzeMarketArgs = map[int16]string{
+	1: "req",
+}
+
+func (p *StockAPIAnalyzeMarketArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *StockAPIAnalyzeMarketArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockAPIAnalyzeMarketArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *StockAPIAnalyzeMarketArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := NewMarketAnalysisRequest()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Req = _field
+	return nil
+}
+
+func (p *StockAPIAnalyzeMarketArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("AnalyzeMarket_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *StockAPIAnalyzeMarketArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("req", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Req.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *StockAPIAnalyzeMarketArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("StockAPIAnalyzeMarketArgs(%+v)", *p)
+
+}
+
+type StockAPIAnalyzeMarketResult struct {
+	Success *MarketAnalysisResponse `thrift:"success,0,optional"`
+}
+
+func NewStockAPIAnalyzeMarketResult() *StockAPIAnalyzeMarketResult {
+	return &StockAPIAnalyzeMarketResult{}
+}
+
+func (p *StockAPIAnalyzeMarketResult) InitDefault() {
+}
+
+var StockAPIAnalyzeMarketResult_Success_DEFAULT *MarketAnalysisResponse
+
+func (p *StockAPIAnalyzeMarketResult) GetSuccess() (v *MarketAnalysisResponse) {
+	if !p.IsSetSuccess() {
+		return StockAPIAnalyzeMarketResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_StockAPIAnalyzeMarketResult = map[int16]string{
+	0: "success",
+}
+
+func (p *StockAPIAnalyzeMarketResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *StockAPIAnalyzeMarketResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_StockAPIAnalyzeMarketResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *StockAPIAnalyzeMarketResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := NewMarketAnalysisResponse()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *StockAPIAnalyzeMarketResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("AnalyzeMarket_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *StockAPIAnalyzeMarketResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *StockAPIAnalyzeMarketResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("StockAPIAnalyzeMarketResult(%+v)", *p)
 
 }
 

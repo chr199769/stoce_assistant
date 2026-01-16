@@ -6,9 +6,9 @@ import (
 	"context"
 	"io"
 
-	"stock_assistant/backend/gateway/kitex_gen/ai"
 	api "stock_assistant/backend/gateway/biz/model/api"
 	"stock_assistant/backend/gateway/biz/rpc"
+	"stock_assistant/backend/gateway/kitex_gen/ai"
 	"stock_assistant/backend/gateway/kitex_gen/stock"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -220,9 +220,11 @@ func MarketReview(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp := &api.MarketReviewResponse{
-		Summary:    rpcResp.Summary,
-		Confidence: 0.85,     // Mock confidence as it's not in rpcResp yet
-		Date:       req.Date, // Echo date
+		Summary:           rpcResp.Summary,
+		SectorAnalysis:    rpcResp.SectorAnalysis,
+		SentimentAnalysis: rpcResp.SentimentAnalysis,
+		KeyRisks:          rpcResp.KeyRisks,
+		Opportunities:     rpcResp.Opportunities,
 	}
 
 	c.JSON(consts.StatusOK, resp)
@@ -327,6 +329,38 @@ func GetDragonTigerList(ctx context.Context, c *app.RequestContext) {
 				SellSeats:     sellSeats,
 			})
 		}
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// AnalyzeMarket .
+// @router /api/market/analysis [POST]
+func AnalyzeMarket(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.MarketAnalysisRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &ai.MarketAnalysisRequest{
+		Date: req.Date,
+	}
+
+	rpcResp, err := rpc.AIClient.AnalyzeMarket(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.MarketAnalysisResponse{
+		HotStocks:         rpcResp.HotStocks,
+		RecommendedStocks: rpcResp.RecommendedStocks,
+		Risks:             rpcResp.Risks,
+		Opportunities:     rpcResp.Opportunities,
+		AnalysisSummary:   rpcResp.AnalysisSummary,
 	}
 
 	c.JSON(consts.StatusOK, resp)

@@ -449,10 +449,10 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 }
 
 func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, dragonTigerList []*stock.DragonTigerItem, date string) (*ai.MarketReviewResponse, error) {
+	// ... (Implementation for MarketReview - Focus on Today's Summary)
 	// 1. Determine ModelConfig
 	var cfg ModelConfig
 	if p.fileConfig != nil {
-		// Use default provider for now
 		var ok bool
 		cfg, ok = p.fileConfig.Models[string(p.fileConfig.CurrentProvider)]
 		if ok {
@@ -502,14 +502,16 @@ func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.S
 		if len(item.BuySeats) > 0 {
 			dtSummary.WriteString("  [Buy Seats]: ")
 			for k, seat := range item.BuySeats {
-				if k >= 2 { break }
+				if k >= 2 {
+					break
+				}
 				dtSummary.WriteString(fmt.Sprintf("%s(%.0f), ", seat.Name, seat.NetAmt/10000))
 			}
 			dtSummary.WriteString("\n")
 		}
 	}
 
-	// 4. Create Prompt
+	// 4. Create Prompt (Focus on Review/Summary)
 	prompt := fmt.Sprintf(`You are an expert Stock Market Analyst.
 Your task is to provide a comprehensive "Market Review" (复盘) for the A-share market on %s.
 
@@ -525,6 +527,11 @@ Here is the market data:
 %s
 
 Please analyze the data and generate a structured review in Chinese (Simplified).
+
+IMPORTANT: The provided data (Limit-Up, Dragon Tiger) might be empty if the market is closed or API fails.
+If any data section is empty, explicitly state that "No sufficient data available" for that part, and DO NOT HALLUCINATE or invent stock names.
+If Limit-Up Data is empty, do not list any "Hot Stocks" unless they are from the Dragon Tiger List or Sectors.
+If NO data is available at all, return a summary stating that market data is unavailable.
 
 Structure:
 1. **Market Summary (市场总览)**: A brief summary of today's market emotion and main themes.
@@ -584,4 +591,135 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 	}
 
 	return &review, nil
+}
+
+func (p *LangChainProvider) AnalyzeMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, dragonTigerList []*stock.DragonTigerItem, date string) (*ai.MarketAnalysisResponse, error) {
+	// 1. Determine ModelConfig
+	var cfg ModelConfig
+	if p.fileConfig != nil {
+		var ok bool
+		cfg, ok = p.fileConfig.Models[string(p.fileConfig.CurrentProvider)]
+		if ok {
+			cfg.Provider = p.fileConfig.CurrentProvider
+		} else {
+			return nil, fmt.Errorf("provider not found")
+		}
+	} else {
+		return nil, fmt.Errorf("no config found")
+	}
+
+	log.Printf("Using LLM Provider for Market Analysis: %s, Model: %s", cfg.Provider, cfg.ModelName)
+
+	// 2. Create LLM
+	llmClient, err := NewModel(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create llm: %w", err)
+	}
+
+	// 3. Prepare Data Context (Reuse same context logic as ReviewMarket)
+	var sectorSummary strings.Builder
+	sectorSummary.WriteString("Top Sectors:\n")
+	for i, s := range sectors {
+		if i >= 10 {
+			break
+		}
+		sectorSummary.WriteString(fmt.Sprintf("- %s: +%.2f%% (Net Inflow: %.2f), Top Stock: %s\n", s.Name, s.ChangePercent, s.NetInflow, s.TopStockName))
+	}
+
+	var limitUpSummary strings.Builder
+	limitUpSummary.WriteString(fmt.Sprintf("Limit Up Pool (Total: %d):\n", len(limitUps)))
+	typeCount := make(map[string]int)
+	for _, s := range limitUps {
+		typeCount[s.LimitUpType]++
+		limitUpSummary.WriteString(fmt.Sprintf("- %s: %s, %s, %s\n", s.Name, s.LimitUpType, s.Reason, s.ChangePercent))
+	}
+
+	var dtSummary strings.Builder
+	dtSummary.WriteString(fmt.Sprintf("Dragon Tiger List (Top 5 Net Buy):\n"))
+	for i, item := range dragonTigerList {
+		if i >= 5 {
+			break
+		}
+		dtSummary.WriteString(fmt.Sprintf("- %s: +%.2f%%, Net: %.1f Wan, Reason: %s\n", item.Name, item.ChangePercent, item.NetInflow/10000, item.Reason))
+	}
+
+	// 4. Create Prompt (Focus on Prediction/Opportunity/Risk)
+	prompt := fmt.Sprintf(`You are an expert Stock Market Analyst.
+Your task is to provide a "Pre-market Analysis" (盘前分析) for the A-share market, based on the provided data.
+
+Here is the latest available market data (representing the most recent trading session, usually yesterday or last Friday):
+
+[Sector Performance]
+%s
+
+[Limit-Up (Sentiment) Data]
+%s
+
+[Dragon Tiger List (Hot Money)]
+%s
+
+Please analyze the data and generate a structured analysis focused on OPPORTUNITIES and RISKS for the NEXT trading day (the upcoming opening).
+Do not limit your analysis to describing the past; use the data to PREDICT the future trend.
+
+IMPORTANT: The provided data (Limit-Up, Dragon Tiger) might be empty if the market is closed or API fails.
+If any data section is empty, explicitly state that "No sufficient data available" for that part, and DO NOT HALLUCINATE or invent stock names.
+If Limit-Up Data is empty, do not list any "Hot Stocks" unless they are from the Dragon Tiger List or Sectors.
+If NO data is available at all, return a summary stating that market data is unavailable.
+
+Structure:
+1. **Hot Stocks (热门股票)**: Identify 3-5 stocks that are likely to be active tomorrow based on limit-up momentum or dragon tiger list funds.
+2. **Recommended Stocks (推荐关注)**: Recommend 1-3 stocks with strong logic (e.g., sector resonance, hot money inflow). Provide brief reasons.
+3. **Risks (风险提示)**: What should traders watch out for in the next session? (e.g., high-level divergence, sector rotation failure).
+4. **Opportunities (机会展望)**: Which sectors or themes might lead tomorrow?
+5. **Analysis Summary (分析总结)**: A concise overview of the strategy for tomorrow.
+
+Output ONLY a JSON object with the following fields:
+{
+  "hot_stocks": ["stock1", "stock2"],
+  "recommended_stocks": ["stock1 (Reason)", "stock2 (Reason)"],
+  "risks": ["risk1", "risk2"],
+  "opportunities": ["opp1", "opp2"],
+  "analysis_summary": "..."
+}
+
+Ensure the response is valid JSON. Do not include markdown formatting like `+"```json"+`.
+`, sectorSummary.String(), limitUpSummary.String(), dtSummary.String())
+
+	messages := []llms.MessageContent{
+		{
+			Role: llms.ChatMessageTypeHuman,
+			Parts: []llms.ContentPart{
+				llms.TextContent{Text: prompt},
+			},
+		},
+	}
+
+	// 5. Generate
+	resp, err := llmClient.GenerateContent(ctx, messages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate analysis: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("no content generated")
+	}
+
+	content := resp.Choices[0].Content
+	log.Printf("Raw Analysis Response: %s", content)
+
+	// 6. Parse JSON
+	content = strings.TrimSpace(content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var analysis ai.MarketAnalysisResponse
+	if err := json.Unmarshal([]byte(content), &analysis); err != nil {
+		log.Printf("Failed to parse analysis JSON: %v. Raw: %s", err, content)
+		return &ai.MarketAnalysisResponse{
+			AnalysisSummary: content,
+		}, nil
+	}
+
+	return &analysis, nil
 }

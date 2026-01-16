@@ -90,3 +90,8 @@ func _getsectorstocksMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _analyzemarketMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

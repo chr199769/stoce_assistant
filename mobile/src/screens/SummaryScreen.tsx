@@ -115,11 +115,12 @@ const SummaryScreen = () => {
             ) : review ? (
               <>
                 <Text variant="bodyMedium" style={styles.reviewText}>{review.summary}</Text>
-                <View style={styles.confidenceContainer}>
+                {/* Confidence and Date are removed from IDL for now */}
+                {/* <View style={styles.confidenceContainer}>
                   <Text variant="bodySmall" style={styles.confidenceLabel}>置信度:</Text>
                   <Text variant="bodySmall" style={styles.confidenceValue}>{(review.confidence * 100).toFixed(0)}%</Text>
                 </View>
-                <Text variant="bodySmall" style={styles.dateText}>日期: {review.date}</Text>
+                <Text variant="bodySmall" style={styles.dateText}>日期: {review.date}</Text> */}
               </>
             ) : (
               <Button mode="outlined" onPress={fetchReview}>加载复盘</Button>

@@ -14,6 +14,7 @@ type Client interface {
 	GetPrediction(ctx context.Context, req *ai.GetPredictionRequest, callOptions ...callopt.Option) (r *ai.GetPredictionResponse, err error)
 	ImageRecognition(ctx context.Context, req *ai.ImageRecognitionRequest, callOptions ...callopt.Option) (r *ai.ImageRecognitionResponse, err error)
 	MarketReview(ctx context.Context, req *ai.MarketReviewRequest, callOptions ...callopt.Option) (r *ai.MarketReviewResponse, err error)
+	AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysisRequest, callOptions ...callopt.Option) (r *ai.MarketAnalysisResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -58,4 +59,9 @@ func (p *kAIServiceClient) ImageRecognition(ctx context.Context, req *ai.ImageRe
 func (p *kAIServiceClient) MarketReview(ctx context.Context, req *ai.MarketReviewRequest, callOptions ...callopt.Option) (r *ai.MarketReviewResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.MarketReview(ctx, req)
+}
+
+func (p *kAIServiceClient) AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysisRequest, callOptions ...callopt.Option) (r *ai.MarketAnalysisResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.AnalyzeMarket(ctx, req)
 }

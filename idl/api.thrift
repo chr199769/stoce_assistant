@@ -63,8 +63,22 @@ struct MarketReviewRequest {
 
 struct MarketReviewResponse {
     1: string summary
-    2: double confidence
-    3: string date
+    2: string sector_analysis
+    3: string sentiment_analysis
+    4: list<string> key_risks
+    5: list<string> opportunities
+}
+
+struct MarketAnalysisRequest {
+    1: string date (api.body="date")
+}
+
+struct MarketAnalysisResponse {
+    1: list<string> hot_stocks
+    2: list<string> recommended_stocks
+    3: list<string> risks
+    4: list<string> opportunities
+    5: string analysis_summary
 }
 
 service StockAPI {
@@ -73,6 +87,7 @@ service StockAPI {
     ImageRecognitionResponse RecognizeStockImage(1: ImageRecognitionRequest req) (api.post="/api/image/recognize")
     GetFinancialReportResponse GetFinancialReport(1: GetFinancialReportRequest req) (api.get="/api/stocks/:code/financial")
     MarketReviewResponse MarketReview(1: MarketReviewRequest req) (api.post="/api/market/review")
+    MarketAnalysisResponse AnalyzeMarket(1: MarketAnalysisRequest req) (api.post="/api/market/analysis")
     
     // Phase 2: Sector Details & Dragon Tiger List
     GetSectorStocksResponse GetSectorStocks(1: GetSectorStocksRequest req) (api.get="/api/stock/sector/stocks")

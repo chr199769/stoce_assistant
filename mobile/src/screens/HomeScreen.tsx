@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar } from 'react-native';
-import { Card, Text, FAB, Dialog, Portal, TextInput, Button, IconButton } from 'react-native-paper';
-import { getRealtime, recognizeStockImage } from '../api/stock';
-import { RealtimeResponse } from '../types';
+import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar, TouchableOpacity } from 'react-native';
+import { Card, Text, FAB, Dialog, Portal, TextInput, Button, ActivityIndicator, Divider } from 'react-native-paper';
+import { getRealtime, recognizeStockImage, getPrediction } from '../api/stock';
+import { RealtimeResponse, PredictionResponse } from '../types';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -17,6 +17,9 @@ const HomeScreen = () => {
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const watchlistRef = useRef<string[]>([]);
   const [fabOpen, setFabOpen] = useState(false);
+  const [predictions, setPredictions] = useState<{[key: string]: PredictionResponse}>({});
+  const [predicting, setPredicting] = useState<{[key: string]: boolean}>({});
+  const [expandedStock, setExpandedStock] = useState<string | null>(null);
 
   const navigation = useNavigation();
 
@@ -214,6 +217,33 @@ const HomeScreen = () => {
     }
   };
 
+  const handlePredict = async (code: string) => {
+    if (expandedStock === code) {
+      setExpandedStock(null);
+      return;
+    }
+    
+    setExpandedStock(code);
+    
+    if (predictions[code]) return; // Already have data
+
+    setPredicting(prev => ({ ...prev, [code]: true }));
+    try {
+      const res = await getPrediction({
+        code,
+        days: 3,
+        include_news: true,
+        model: 'doubao-pro-32k'
+      });
+      setPredictions(prev => ({ ...prev, [code]: res }));
+    } catch (error) {
+      console.error('Prediction failed', error);
+      Alert.alert('错误', '获取预测失败');
+    } finally {
+      setPredicting(prev => ({ ...prev, [code]: false }));
+    }
+  };
+
   const getColor = (change: number) => {
     if (change > 0) return '#F44336'; // Red for up
     if (change < 0) return '#4CAF50'; // Green for down
@@ -232,11 +262,7 @@ const HomeScreen = () => {
         contentContainerStyle={styles.scrollContent}
       >
         {stocks.map((stock) => (
-          <Card key={stock.code} style={styles.card} onPress={() => {
-            // Navigate to prediction with this code
-            // @ts-ignore
-            navigation.navigate('Prediction', { code: stock.code });
-          }}>
+          <Card key={stock.code} style={styles.card}>
             <Card.Content style={styles.cardContent}>
               <View style={styles.row}>
                 <View>
@@ -263,6 +289,45 @@ const HomeScreen = () => {
                   </Button>
                 </View>
               </View>
+
+              <View style={styles.actionRow}>
+                <Button 
+                  mode={expandedStock === stock.code ? "contained-tonal" : "outlined"} 
+                  onPress={() => handlePredict(stock.code)}
+                  compact
+                  icon="crystal-ball"
+                  style={styles.predictBtn}
+                >
+                  AI 预测
+                </Button>
+              </View>
+
+              {expandedStock === stock.code && (
+                <View style={styles.predictionContainer}>
+                  <Divider style={styles.divider} />
+                  {predicting[stock.code] ? (
+                    <ActivityIndicator animating={true} size="small" style={styles.loader} />
+                  ) : predictions[stock.code] ? (
+                    <View>
+                      <View style={styles.predictionHeader}>
+                        <Text variant="labelLarge">置信度: {(predictions[stock.code].confidence * 100).toFixed(0)}%</Text>
+                      </View>
+                      <Text variant="bodyMedium" style={styles.analysisText}>
+                        {predictions[stock.code].analysis}
+                      </Text>
+                      {predictions[stock.code].news_summary && (
+                         <View style={styles.newsBox}>
+                           <Text variant="bodySmall" style={styles.newsText}>
+                             📰 {predictions[stock.code].news_summary}
+                           </Text>
+                         </View>
+                      )}
+                    </View>
+                  ) : (
+                    <Text>暂无数据</Text>
+                  )}
+                </View>
+              )}
             </Card.Content>
           </Card>
         ))}
@@ -365,6 +430,42 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 0,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  predictBtn: {
+    marginLeft: 8,
+  },
+  predictionContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+  },
+  divider: {
+    marginBottom: 8,
+  },
+  loader: {
+    marginVertical: 10,
+  },
+  predictionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  analysisText: {
+    lineHeight: 20,
+    color: '#333',
+  },
+  newsBox: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 4,
+  },
+  newsText: {
+    color: '#1565C0',
   },
 });
 

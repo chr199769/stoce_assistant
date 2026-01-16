@@ -34,6 +34,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"AnalyzeMarket": kitex.NewMethodInfo(
+		analyzeMarketHandler,
+		newAIServiceAnalyzeMarketArgs,
+		newAIServiceAnalyzeMarketResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 }
 
 var (
@@ -154,6 +161,24 @@ func newAIServiceMarketReviewResult() interface{} {
 	return ai.NewAIServiceMarketReviewResult()
 }
 
+func analyzeMarketHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*ai.AIServiceAnalyzeMarketArgs)
+	realResult := result.(*ai.AIServiceAnalyzeMarketResult)
+	success, err := handler.(ai.AIService).AnalyzeMarket(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newAIServiceAnalyzeMarketArgs() interface{} {
+	return ai.NewAIServiceAnalyzeMarketArgs()
+}
+
+func newAIServiceAnalyzeMarketResult() interface{} {
+	return ai.NewAIServiceAnalyzeMarketResult()
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -189,6 +214,16 @@ func (p *kClient) MarketReview(ctx context.Context, req *ai.MarketReviewRequest)
 	_args.Req = req
 	var _result ai.AIServiceMarketReviewResult
 	if err = p.c.Call(ctx, "MarketReview", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysisRequest) (r *ai.MarketAnalysisResponse, err error) {
+	var _args ai.AIServiceAnalyzeMarketArgs
+	_args.Req = req
+	var _result ai.AIServiceAnalyzeMarketResult
+	if err = p.c.Call(ctx, "AnalyzeMarket", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

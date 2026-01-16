@@ -45,8 +45,21 @@ struct MarketReviewResponse {
     5: list<string> opportunities
 }
 
+struct MarketAnalysisRequest {
+    1: string date
+}
+
+struct MarketAnalysisResponse {
+    1: list<string> hot_stocks
+    2: list<string> recommended_stocks
+    3: list<string> risks
+    4: list<string> opportunities
+    5: string analysis_summary
+}
+
 service AIService {
     GetPredictionResponse GetPrediction(1: GetPredictionRequest req)
     ImageRecognitionResponse ImageRecognition(1: ImageRecognitionRequest req)
     MarketReviewResponse MarketReview(1: MarketReviewRequest req)
+    MarketAnalysisResponse AnalyzeMarket(1: MarketAnalysisRequest req)
 }

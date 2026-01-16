@@ -31,3 +31,10 @@ TBD - created by archiving change optimize-stock-prediction. Update Purpose afte
 - **WHEN** 用户请求指定股票的财报数据
 - **THEN** 系统返回最近 4 个季度的关键财务指标列表
 
+### Requirement: Data Authenticity
+The system MUST NOT return hardcoded mock data for market sentiment or stock information in production environments or default fallback paths.
+
+#### Scenario: API Failure
+- **WHEN** the external data provider API fails or returns invalid data
+- **THEN** the system MUST return an error or an empty dataset, NOT fake data
+

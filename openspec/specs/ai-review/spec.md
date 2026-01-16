@@ -32,6 +32,10 @@ The system MUST provide a MarketReviewAgent that acts as a professional securiti
   - Capital Flow (Northbound funds, main capital)
   - Alert Risks (Dive stocks, high-level divergence)
 
+#### Scenario: Handle Missing Data
+- **WHEN** essential market data (e.g., limit-up pool, dragon tiger list) is empty or unavailable
+- **THEN** the agent MUST explicitly state "Data Unavailable" for that section and MUST NOT fabricate data or analysis
+
 ### Requirement: Market Review Toolchain
 The agent MUST have access to specific tools to retrieve market data.
 

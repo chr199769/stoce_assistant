@@ -6,6 +6,8 @@ import {
   ImageRecognitionResponse,
   MarketReviewRequest,
   MarketReviewResponse,
+  MarketAnalysisRequest,
+  MarketAnalysisResponse,
   GetSectorStocksResponse,
   GetDragonTigerListResponse
 } from '../types';
@@ -45,6 +47,13 @@ export const marketReview = async (req: MarketReviewRequest): Promise<MarketRevi
   const response = await client.post<MarketReviewResponse>('/api/market/review', {
     date: req.date,
     focus_sectors: req.focus_sectors,
+  });
+  return response.data;
+};
+
+export const analyzeMarket = async (req: MarketAnalysisRequest): Promise<MarketAnalysisResponse> => {
+  const response = await client.post<MarketAnalysisResponse>('/api/market/analysis', {
+    date: req.date,
   });
   return response.data;
 };

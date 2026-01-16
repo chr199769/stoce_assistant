@@ -146,3 +146,50 @@ func (s *AIServiceImpl) MarketReview(ctx context.Context, req *ai.MarketReviewRe
 
 	return review, nil
 }
+
+// AnalyzeMarket implements the AIServiceImpl interface.
+func (s *AIServiceImpl) AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysisRequest) (resp *ai.MarketAnalysisResponse, err error) {
+	log.Printf("Received market analysis request: Date=%s", req.Date)
+
+	// 1. Fetch Sector Data
+	sectorReq := &stock.GetMarketSectorsRequest{
+		Type:  "concept",
+		Limit: 20,
+	}
+	sectorResp, err := s.stockClient.GetMarketSectors(ctx, sectorReq)
+	if err != nil {
+		log.Printf("Failed to get market sectors: %v", err)
+		return nil, err
+	}
+
+	// 2. Fetch Limit Up Data
+	limitUpReq := &stock.GetLimitUpPoolRequest{
+		Date: req.Date,
+	}
+	limitUpResp, err := s.stockClient.GetLimitUpPool(ctx, limitUpReq)
+	if err != nil {
+		log.Printf("Failed to get limit up pool: %v", err)
+		return nil, err
+	}
+
+	// 3. Fetch Dragon Tiger List
+	dtReq := &stock.GetDragonTigerListRequest{
+		Date: req.Date,
+	}
+	dtResp, err := s.stockClient.GetDragonTigerList(ctx, dtReq)
+	if err != nil {
+		log.Printf("Failed to get dragon tiger list: %v", err)
+		// Don't fail the whole request, just log and pass nil/empty
+		dtResp = &stock.GetDragonTigerListResponse{}
+	}
+
+	// 4. Call LLM Provider
+	log.Printf("Calling AnalyzeMarket with: Sectors=%d, LimitUps=%d, DTItems=%d", len(sectorResp.Sectors), len(limitUpResp.Stocks), len(dtResp.Items))
+	analysis, err := s.llmProvider.AnalyzeMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, dtResp.Items, req.Date)
+	if err != nil {
+		log.Printf("Failed to generate market analysis: %v", err)
+		return nil, err
+	}
+
+	return analysis, nil
+}

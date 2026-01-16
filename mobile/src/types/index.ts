@@ -37,8 +37,22 @@ export interface MarketReviewRequest {
 
 export interface MarketReviewResponse {
   summary: string;
-  confidence: number;
-  date: string;
+  sector_analysis?: string;
+  sentiment_analysis?: string;
+  key_risks?: string[];
+  opportunities?: string[];
+}
+
+export interface MarketAnalysisRequest {
+  date?: string;
+}
+
+export interface MarketAnalysisResponse {
+  hot_stocks: string[];
+  recommended_stocks: string[];
+  risks: string[];
+  opportunities: string[];
+  analysis_summary: string;
 }
 
 // Phase 2: Sector & Dragon Tiger Types

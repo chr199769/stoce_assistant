@@ -3,9 +3,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from '../screens/HomeScreen';
 import PredictionScreen from '../screens/PredictionScreen';
+import MarketAnalysisScreen from '../screens/MarketAnalysisScreen';
 import SummaryScreen from '../screens/SummaryScreen';
-import SectorDetailScreen from '../screens/SectorDetailScreen';
 import DragonTigerScreen from '../screens/DragonTigerScreen';
+import SectorDetailScreen from '../screens/SectorDetailScreen';
 import { Text } from 'react-native-paper';
 
 // Define types for navigation
@@ -18,8 +19,8 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Home: undefined;
-  PredictionTab: undefined;
   Summary: undefined;
+  MarketAnalysis: undefined;
   DragonTigerTab: undefined;
 };
 
@@ -33,13 +34,11 @@ const TabNavigator = () => {
         headerShown: false,
         tabBarIcon: ({ color, size }) => {
           let iconName = '';
-          if (route.name === 'Home') iconName = '🏠'; // Fallback to emoji if icons fail
-          else if (route.name === 'PredictionTab') iconName = '🔮';
-          else if (route.name === 'Summary') iconName = '📊';
+          if (route.name === 'Home') iconName = '🏠';
+          else if (route.name === 'Summary') iconName = '📝';
+          else if (route.name === 'MarketAnalysis') iconName = '🔮';
           else if (route.name === 'DragonTigerTab') iconName = '🐉';
 
-          // Using Text as icon to avoid linking issues for now.
-          // In a real app, use <Icon source="home" color={color} size={size} /> from react-native-paper
           return <Text style={{ fontSize: size - 4, color }}>{iconName}</Text>;
         },
         tabBarActiveTintColor: '#1E88E5',
@@ -54,17 +53,17 @@ const TabNavigator = () => {
       <Tab.Screen
         name="Summary"
         component={SummaryScreen}
-        options={{ title: '大盘总结' }}
+        options={{ title: '复盘' }}
+      />
+      <Tab.Screen
+        name="MarketAnalysis"
+        component={MarketAnalysisScreen}
+        options={{ title: '盘前' }}
       />
       <Tab.Screen
         name="DragonTigerTab"
         component={DragonTigerScreen}
         options={{ title: '龙虎榜' }}
-      />
-      <Tab.Screen
-        name="PredictionTab"
-        component={PredictionScreen}
-        options={{ title: '个股预测' }}
       />
     </Tab.Navigator>
   );

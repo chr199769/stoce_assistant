@@ -25,6 +25,7 @@ func Register(r *server.Hertz) {
 		}
 		{
 			_market := _api.Group("/market", _marketMw()...)
+			_market.POST("/analysis", append(_analyzemarketMw(), api.AnalyzeMarket)...)
 			_market.POST("/review", append(_marketreviewMw(), api.MarketReview)...)
 		}
 		{
