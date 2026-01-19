@@ -6,8 +6,8 @@ require (
 	github.com/cloudwego/gopkg v0.1.8
 	github.com/cloudwego/kitex v0.15.4
 	github.com/cloudwego/kitex/pkg/protocol/bthrift v0.0.0-20260112072316-5cf426cf9e1b
-	github.com/tmc/langchaingo v0.1.14
 	github.com/langfuse/langfuse-go v0.0.0-20250303121915-2493e318198e
+	github.com/tmc/langchaingo v0.1.14
 )
 
 require (

@@ -163,6 +163,13 @@ type Client interface {
 	GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest, callOptions ...callopt.Option) (r *stock.GetLimitUpPoolResponse, err error)
 	GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest, callOptions ...callopt.Option) (r *stock.GetSectorStocksResponse, err error)
 	GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest, callOptions ...callopt.Option) (r *stock.GetDragonTigerListResponse, err error)
+	GetOrCreateUser(ctx context.Context, req *stock.GetOrCreateUserRequest, callOptions ...callopt.Option) (r *stock.GetOrCreateUserResponse, err error)
+	AddWatchlist(ctx context.Context, req *stock.AddWatchlistRequest, callOptions ...callopt.Option) (r *stock.AddWatchlistResponse, err error)
+	GetWatchlist(ctx context.Context, req *stock.GetWatchlistRequest, callOptions ...callopt.Option) (r *stock.GetWatchlistResponse, err error)
+	RemoveWatchlist(ctx context.Context, req *stock.RemoveWatchlistRequest, callOptions ...callopt.Option) (r *stock.RemoveWatchlistResponse, err error)
+	SaveIntradaySignal(ctx context.Context, req *stock.SaveIntradaySignalRequest, callOptions ...callopt.Option) (r *stock.SaveIntradaySignalResponse, err error)
+	GetIntradaySignals(ctx context.Context, req *stock.GetIntradaySignalsRequest, callOptions ...callopt.Option) (r *stock.GetIntradaySignalsResponse, err error)
+	GetHistoricalKline(ctx context.Context, req *stock.GetHistoricalKlineRequest, callOptions ...callopt.Option) (r *stock.GetHistoricalKlineResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -222,6 +229,41 @@ func (p *kStockServiceClient) GetSectorStocks(ctx context.Context, req *stock.Ge
 func (p *kStockServiceClient) GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest, callOptions ...callopt.Option) (r *stock.GetDragonTigerListResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetDragonTigerList(ctx, req)
+}
+
+func (p *kStockServiceClient) GetOrCreateUser(ctx context.Context, req *stock.GetOrCreateUserRequest, callOptions ...callopt.Option) (r *stock.GetOrCreateUserResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetOrCreateUser(ctx, req)
+}
+
+func (p *kStockServiceClient) AddWatchlist(ctx context.Context, req *stock.AddWatchlistRequest, callOptions ...callopt.Option) (r *stock.AddWatchlistResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.AddWatchlist(ctx, req)
+}
+
+func (p *kStockServiceClient) GetWatchlist(ctx context.Context, req *stock.GetWatchlistRequest, callOptions ...callopt.Option) (r *stock.GetWatchlistResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetWatchlist(ctx, req)
+}
+
+func (p *kStockServiceClient) RemoveWatchlist(ctx context.Context, req *stock.RemoveWatchlistRequest, callOptions ...callopt.Option) (r *stock.RemoveWatchlistResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RemoveWatchlist(ctx, req)
+}
+
+func (p *kStockServiceClient) SaveIntradaySignal(ctx context.Context, req *stock.SaveIntradaySignalRequest, callOptions ...callopt.Option) (r *stock.SaveIntradaySignalResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.SaveIntradaySignal(ctx, req)
+}
+
+func (p *kStockServiceClient) GetIntradaySignals(ctx context.Context, req *stock.GetIntradaySignalsRequest, callOptions ...callopt.Option) (r *stock.GetIntradaySignalsResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetIntradaySignals(ctx, req)
+}
+
+func (p *kStockServiceClient) GetHistoricalKline(ctx context.Context, req *stock.GetHistoricalKlineRequest, callOptions ...callopt.Option) (r *stock.GetHistoricalKlineResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetHistoricalKline(ctx, req)
 }
 `
 	os.WriteFile("kitex_gen/stock/stockservice/client.go", []byte(stockClientContent), 0644)
