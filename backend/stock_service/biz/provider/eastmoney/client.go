@@ -99,17 +99,17 @@ func (c *Client) GetFinancialReports(ctx context.Context, code string) ([]*stock
 // --- Sector Data Support ---
 
 type SectorRankResponse struct {
-	Rc   int    `json:"rc"`
+	Rc   int `json:"rc"`
 	Data *struct {
 		Total int `json:"total"`
 		Diff  []struct {
-			Code             string  `json:"f12"`
-			Name             string  `json:"f14"`
-			ChangePercent    float64 `json:"f3"`
-			NetInflow        float64 `json:"f62"`
-			TopStockName     string  `json:"f128"`
-			TopStockCode     string  `json:"f140"`
-			TopStockChange   float64 `json:"f136"`
+			Code           string  `json:"f12"`
+			Name           string  `json:"f14"`
+			ChangePercent  float64 `json:"f3"`
+			NetInflow      float64 `json:"f62"`
+			TopStockName   string  `json:"f128"`
+			TopStockCode   string  `json:"f140"`
+			TopStockChange float64 `json:"f136"`
 		} `json:"diff"`
 	} `json:"data"`
 }
@@ -328,7 +328,8 @@ func (c *Client) GetDragonTigerList(ctx context.Context, date string) ([]*Dragon
 	}
 
 	if !result.Success {
-		return nil, fmt.Errorf("eastmoney api failed or no data")
+		// If no data, return empty list instead of error
+		return []*DragonTigerItem{}, nil
 	}
 
 	var items []*DragonTigerItem

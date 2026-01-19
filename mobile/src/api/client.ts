@@ -11,4 +11,23 @@ const client = axios.create({
   },
 });
 
+// Add request interceptor for debugging
+client.interceptors.request.use(request => {
+  console.log('Starting Request:', request.method?.toUpperCase(), request.url);
+  console.log('Request Data:', request.data);
+  return request;
+});
+
+client.interceptors.response.use(response => {
+  console.log('Response:', response.status, response.config.url);
+  return response;
+}, error => {
+  console.log('Response Error:', error.message);
+  if (error.response) {
+      console.log('Error Data:', error.response.data);
+      console.log('Error Status:', error.response.status);
+  }
+  return Promise.reject(error);
+});
+
 export default client;

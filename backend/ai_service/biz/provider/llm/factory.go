@@ -18,6 +18,7 @@ const (
 	ProviderQwen     ModelProvider = "qwen"
 	ProviderDoubao   ModelProvider = "doubao"
 	ProviderDeepSeek ModelProvider = "deepseek"
+	ProviderFake     ModelProvider = "fake"
 )
 
 type ModelConfig struct {

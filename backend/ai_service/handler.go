@@ -48,7 +48,6 @@ func NewAIServiceImpl() *AIServiceImpl {
 	p, err := llm.NewLangChainProvider(context.Background(), c, fileConfig)
 	if err != nil {
 		log.Printf("failed to init langchain provider: %v", err)
-		// log.Printf("falling back to mock provider")
 		// return &AIServiceImpl{llmProvider: llm.NewMockProvider()}
 		// Instead of mock, we return a provider that is nil or error prone?
 		// Since NewLangChainProvider now returns error if config is missing.

@@ -95,3 +95,48 @@ func _analyzemarketMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getlimituppoolMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getmarketsectorsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _gethistoricalklineMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _userMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getorcreateuserMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _watchlistMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _addwatchlistMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getwatchlistMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _removewatchlistMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider } from './src/context/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
 const theme = {
@@ -17,9 +18,11 @@ function App() {
   return (
     <SafeAreaProvider>
       <PaperProvider theme={theme}>
-        <NavigationContainer>
-          <AppNavigator />
-        </NavigationContainer>
+        <AuthProvider>
+          <NavigationContainer>
+            <AppNavigator />
+          </NavigationContainer>
+        </AuthProvider>
       </PaperProvider>
     </SafeAreaProvider>
   );

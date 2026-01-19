@@ -26,7 +26,9 @@ func Register(r *server.Hertz) {
 		{
 			_market := _api.Group("/market", _marketMw()...)
 			_market.POST("/analysis", append(_analyzemarketMw(), api.AnalyzeMarket)...)
+			_market.GET("/limit_up", append(_getlimituppoolMw(), api.GetLimitUpPool)...)
 			_market.POST("/review", append(_marketreviewMw(), api.MarketReview)...)
+			_market.GET("/sectors", append(_getmarketsectorsMw(), api.GetMarketSectors)...)
 		}
 		{
 			_prediction := _api.Group("/prediction", _predictionMw()...)
@@ -34,6 +36,7 @@ func Register(r *server.Hertz) {
 		}
 		{
 			_stock := _api.Group("/stock", _stockMw()...)
+			_stock.GET("/kline", append(_gethistoricalklineMw(), api.GetHistoricalKline)...)
 			{
 				_dragontiger := _stock.Group("/dragontiger", _dragontigerMw()...)
 				_dragontiger.GET("/list", append(_getdragontigerlistMw(), api.GetDragonTigerList)...)
@@ -50,6 +53,16 @@ func Register(r *server.Hertz) {
 				_code.GET("/financial", append(_getfinancialreportMw(), api.GetFinancialReport)...)
 				_code.GET("/realtime", append(_getrealtimeMw(), api.GetRealtime)...)
 			}
+		}
+		{
+			_user := _api.Group("/user", _userMw()...)
+			_user.POST("/login", append(_getorcreateuserMw(), api.GetOrCreateUser)...)
+		}
+		{
+			_watchlist := _api.Group("/watchlist", _watchlistMw()...)
+			_watchlist.POST("/add", append(_addwatchlistMw(), api.AddWatchlist)...)
+			_watchlist.GET("/list", append(_getwatchlistMw(), api.GetWatchlist)...)
+			_watchlist.POST("/remove", append(_removewatchlistMw(), api.RemoveWatchlist)...)
 		}
 	}
 }

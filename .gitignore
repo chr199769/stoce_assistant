@@ -30,3 +30,6 @@ yarn-error.log
 
 # Secrets
 backend/ai_service/conf/llm_config.json
+
+# Generated Code
+**/kitex_gen/

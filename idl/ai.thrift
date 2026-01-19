@@ -55,6 +55,8 @@ struct MarketAnalysisResponse {
     3: list<string> risks
     4: list<string> opportunities
     5: string analysis_summary
+    6: double sentiment_score // 0-100
+    7: double policy_score    // -5 to +5
 }
 
 service AIService {

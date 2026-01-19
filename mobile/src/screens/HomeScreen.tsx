@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar, TouchableOpacity } from 'react-native';
 import { Card, Text, FAB, Dialog, Portal, TextInput, Button, ActivityIndicator, Divider } from 'react-native-paper';
-import { getRealtime, recognizeStockImage, getPrediction } from '../api/stock';
+import { getRealtime, recognizeStockImage, getPrediction, addWatchlist, removeWatchlist, getWatchlist } from '../api/stock';
 import { RealtimeResponse, PredictionResponse } from '../types';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
 
@@ -17,10 +18,11 @@ const HomeScreen = () => {
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const watchlistRef = useRef<string[]>([]);
   const [fabOpen, setFabOpen] = useState(false);
-  const [predictions, setPredictions] = useState<{[key: string]: PredictionResponse}>({});
-  const [predicting, setPredicting] = useState<{[key: string]: boolean}>({});
+  const [predictions, setPredictions] = useState<{ [key: string]: PredictionResponse }>({});
+  const [predicting, setPredicting] = useState<{ [key: string]: boolean }>({});
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
 
+  const { user } = useAuth();
   const navigation = useNavigation();
 
   // Keep ref in sync with state
@@ -35,30 +37,21 @@ const HomeScreen = () => {
 
   const loadWatchlist = async () => {
     try {
-      const stored = await AsyncStorage.getItem(WATCHLIST_KEY);
-      if (stored) {
-        const list = JSON.parse(stored);
-        // Clean up data: trim whitespace, convert to lowercase, and de-duplicate
-        const cleanList = Array.from(new Set(
-          list.map((item: string) => item.trim().toLowerCase())
-        )) as string[];
+      if (user) {
+        console.log('Loading remote watchlist for user:', user.id);
+        const res = await getWatchlist(user.id);
+        console.log('Got remote watchlist:', res);
 
-        // Filter out empty strings
-        const validList = cleanList.filter(item => item.length > 0);
-
-        setWatchlist(validList);
-        // Save cleaned list back to storage if it changed
-        if (JSON.stringify(list) !== JSON.stringify(validList)) {
-          saveWatchlist(validList);
-        }
+        // Ensure we are getting an array
+        const items = res.items || [];
+        const list = items.map(i => i.stock_code);
+        setWatchlist(list);
       } else {
-        // Default stocks
-        const defaults = ['sh600519', 'sz000001', 'sh000001'];
-        setWatchlist(defaults);
-        await AsyncStorage.setItem(WATCHLIST_KEY, JSON.stringify(defaults));
+        setWatchlist([]);
       }
     } catch (e) {
       console.error('Failed to load watchlist', e);
+      setWatchlist([]);
     }
   };
 
@@ -72,13 +65,18 @@ const HomeScreen = () => {
   };
 
   const fetchStocks = async () => {
-    if (watchlist.length === 0) {
+    // If user is logged in, merge local watchlist with remote
+    let currentList = [...watchlist];
+
+    // Always fetch, even if watchlist is empty (to clear list)
+    if (currentList.length === 0) {
       setStocks([]);
       return;
     }
+
     setLoading(true);
     try {
-      const promises = watchlist.map(code => getRealtime(code));
+      const promises = currentList.map(code => getRealtime(code));
       // Use Promise.allSettled to avoid entire failure if one stock fails
       const results = await Promise.allSettled(promises);
 
@@ -144,13 +142,32 @@ const HomeScreen = () => {
   const showDialog = () => setVisible(true);
   const hideDialog = () => setVisible(false);
 
-  const addStock = () => {
+  const addStock = async () => {
+    console.log('addStock called with:', newCode);
+    console.log('Current User:', user);
+
     if (newCode) {
       const code = newCode.trim().toLowerCase();
-      if (code && !watchlist.includes(code)) {
-        const newList = [...watchlist, code];
-        saveWatchlist(newList);
+      if (!code) return;
+
+      // 1. Try to sync with backend if logged in (regardless of local existence)
+      if (user) {
+        try {
+          console.log('Sending AddWatchlist request to backend for:', code);
+          await addWatchlist(user.id, code);
+          console.log('Backend request success');
+
+          // Refresh list from backend
+          await loadWatchlist();
+        } catch (error) {
+          console.error('Failed to sync stock to backend:', error);
+          Alert.alert('错误', '添加失败，请重试');
+        }
+      } else {
+        console.warn('User is null, skipping backend sync');
+        Alert.alert('提示', '请先登录');
       }
+
       setNewCode('');
       hideDialog();
     }
@@ -165,13 +182,17 @@ const HomeScreen = () => {
         {
           text: '删除',
           style: 'destructive',
-          onPress: () => {
-            // Trim and lowercase for robust comparison
-            const targetCode = code.trim().toLowerCase();
-            const newList = watchlist.filter(item => item.trim().toLowerCase() !== targetCode);
-            saveWatchlist(newList);
-            // Optimistically update stocks state to remove the item immediately
-            setStocks(prev => prev.filter(s => s.code !== code));
+          onPress: async () => {
+            try {
+              if (user) {
+                await removeWatchlist(user.id, code);
+                // Refresh list from backend
+                await loadWatchlist();
+              }
+            } catch (e) {
+              console.error('Failed to remove stock', e);
+              Alert.alert('错误', '删除失败');
+            }
           },
         },
       ]
@@ -198,6 +219,10 @@ const HomeScreen = () => {
         if (response.stocks.length > 0) {
           const newCodes = response.stocks.map(s => s.code.trim().toLowerCase()).filter(c => !watchlist.includes(c));
           if (newCodes.length > 0) {
+            if (user) {
+              // Add all to backend
+              await Promise.all(newCodes.map(c => addWatchlist(user.id, c)));
+            }
             const newList = [...watchlist, ...newCodes];
             saveWatchlist(newList);
             Alert.alert('成功', `已添加 ${newCodes.length} 只股票: ${response.stocks.map(s => `${s.name}(${s.code})`).join(', ')}`);
@@ -222,9 +247,9 @@ const HomeScreen = () => {
       setExpandedStock(null);
       return;
     }
-    
+
     setExpandedStock(code);
-    
+
     if (predictions[code]) return; // Already have data
 
     setPredicting(prev => ({ ...prev, [code]: true }));
@@ -291,8 +316,8 @@ const HomeScreen = () => {
               </View>
 
               <View style={styles.actionRow}>
-                <Button 
-                  mode={expandedStock === stock.code ? "contained-tonal" : "outlined"} 
+                <Button
+                  mode={expandedStock === stock.code ? "contained-tonal" : "outlined"}
                   onPress={() => handlePredict(stock.code)}
                   compact
                   icon="crystal-ball"
@@ -316,11 +341,11 @@ const HomeScreen = () => {
                         {predictions[stock.code].analysis}
                       </Text>
                       {predictions[stock.code].news_summary && (
-                         <View style={styles.newsBox}>
-                           <Text variant="bodySmall" style={styles.newsText}>
-                             📰 {predictions[stock.code].news_summary}
-                           </Text>
-                         </View>
+                        <View style={styles.newsBox}>
+                          <Text variant="bodySmall" style={styles.newsText}>
+                            📰 {predictions[stock.code].news_summary}
+                          </Text>
+                        </View>
                       )}
                     </View>
                   ) : (

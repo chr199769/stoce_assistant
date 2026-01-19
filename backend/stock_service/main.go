@@ -7,12 +7,17 @@ import (
 	stock "stock_assistant/backend/stock_service/kitex_gen/stock/stockservice"
 	"stock_assistant/backend/stock_service/dal/mysql"
 	"stock_assistant/backend/stock_service/dal/redis"
+	"stock_assistant/backend/stock_service/biz/worker"
 )
 
 func main() {
 	// Init Data Access Layer
 	mysql.Init()
 	redis.Init()
+
+	// Start EvalWorker
+	evalWorker := worker.NewEvalWorker()
+	evalWorker.Start()
 
 	addr, _ := net.ResolveTCPAddr("tcp", ":8888")
 	svr := stock.NewServer(NewStockServiceImpl(), server.WithServiceAddr(addr))

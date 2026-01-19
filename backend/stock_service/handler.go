@@ -10,6 +10,8 @@ import (
 	"stock_assistant/backend/stock_service/biz/provider/sentiment"
 	"stock_assistant/backend/stock_service/biz/provider/sina"
 	"stock_assistant/backend/stock_service/dal/redis"
+	"stock_assistant/backend/stock_service/dal/model"
+	"stock_assistant/backend/stock_service/dal/mysql"
 	stock "stock_assistant/backend/stock_service/kitex_gen/stock"
 	"sort"
 	"strings"
@@ -273,4 +275,178 @@ func convertSeats(seats []*eastmoney.DragonTigerSeat, m map[string]string) []*st
 		})
 	}
 	return res
+}
+
+// GetOrCreateUser implements the StockServiceImpl interface.
+func (s *StockServiceImpl) GetOrCreateUser(ctx context.Context, req *stock.GetOrCreateUserRequest) (resp *stock.GetOrCreateUserResponse, err error) {
+	if req.Username == "" {
+		return nil, fmt.Errorf("username is required")
+	}
+
+	if mysql.DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	var user model.User
+	// Find or create
+	// GORM FirstOrCreate: finds by unique constraint or primary key, or creates.
+	// Since Username is uniqueIndex, we search by Username.
+	err = mysql.DB.Where(model.User{Username: req.Username}).FirstOrCreate(&user).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &stock.GetOrCreateUserResponse{
+		User: &stock.User{
+			Id:        fmt.Sprintf("%d", user.ID), // Convert uint to string
+			Username:  user.Username,
+			CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		},
+	}, nil
+}
+
+// AddWatchlist implements the StockServiceImpl interface.
+func (s *StockServiceImpl) AddWatchlist(ctx context.Context, req *stock.AddWatchlistRequest) (resp *stock.AddWatchlistResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.AddWatchlistResponse{Success: false}, nil
+	}
+
+	item := model.UserWatchlist{
+		UserID:    req.UserId,
+		StockCode: req.StockCode,
+		Tags:      "[]", // Default empty JSON array
+	}
+	// Check if exists
+	var count int64
+	mysql.DB.Model(&model.UserWatchlist{}).Where("user_id = ? AND stock_code = ?", req.UserId, req.StockCode).Count(&count)
+	if count > 0 {
+		return &stock.AddWatchlistResponse{Success: true}, nil
+	}
+
+	if err := mysql.DB.Create(&item).Error; err != nil {
+		return &stock.AddWatchlistResponse{Success: false}, nil
+	}
+	return &stock.AddWatchlistResponse{Success: true}, nil
+}
+
+// GetWatchlist implements the StockServiceImpl interface.
+func (s *StockServiceImpl) GetWatchlist(ctx context.Context, req *stock.GetWatchlistRequest) (resp *stock.GetWatchlistResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.GetWatchlistResponse{}, nil
+	}
+
+	var items []model.UserWatchlist
+	if err := mysql.DB.Where("user_id = ?", req.UserId).Find(&items).Error; err != nil {
+		return nil, err
+	}
+
+	var thriftItems []*stock.WatchlistItem
+	for _, item := range items {
+		// Simple JSON parse for tags (not robust but sufficient for now)
+		// Tags is stored as string "[]" or `["A","B"]`
+		tags := []string{}
+		if len(item.Tags) > 2 {
+			// Strip brackets and split
+			content := item.Tags[1 : len(item.Tags)-1]
+			if content != "" {
+				// Split by comma
+				parts := strings.Split(content, ",")
+				for _, p := range parts {
+					tags = append(tags, strings.Trim(strings.TrimSpace(p), "\""))
+				}
+			}
+		}
+
+		thriftItems = append(thriftItems, &stock.WatchlistItem{
+			StockCode: item.StockCode,
+			Tags:      tags,
+			AddedAt:   item.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return &stock.GetWatchlistResponse{Items: thriftItems}, nil
+}
+
+// RemoveWatchlist implements the StockServiceImpl interface.
+func (s *StockServiceImpl) RemoveWatchlist(ctx context.Context, req *stock.RemoveWatchlistRequest) (resp *stock.RemoveWatchlistResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.RemoveWatchlistResponse{Success: false}, nil
+	}
+
+	if err := mysql.DB.Where("user_id = ? AND stock_code = ?", req.UserId, req.StockCode).Delete(&model.UserWatchlist{}).Error; err != nil {
+		return &stock.RemoveWatchlistResponse{Success: false}, nil
+	}
+	return &stock.RemoveWatchlistResponse{Success: true}, nil
+}
+
+// SaveIntradaySignal implements the StockServiceImpl interface.
+func (s *StockServiceImpl) SaveIntradaySignal(ctx context.Context, req *stock.SaveIntradaySignalRequest) (resp *stock.SaveIntradaySignalResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.SaveIntradaySignalResponse{Success: false}, nil
+	}
+	if req.Signal == nil {
+		return &stock.SaveIntradaySignalResponse{Success: false}, nil
+	}
+
+	sig := model.IntradaySignal{
+		StockCode:   req.Signal.StockCode,
+		SignalType:  req.Signal.SignalType,
+		Score:       req.Signal.Score,
+		Description: req.Signal.Description,
+		TriggerTime: time.Now(),
+		TraceID:     req.Signal.TraceId,
+	}
+	if err := mysql.DB.Create(&sig).Error; err != nil {
+		return &stock.SaveIntradaySignalResponse{Success: false}, nil
+	}
+	return &stock.SaveIntradaySignalResponse{Success: true}, nil
+}
+
+// GetIntradaySignals implements the StockServiceImpl interface.
+func (s *StockServiceImpl) GetIntradaySignals(ctx context.Context, req *stock.GetIntradaySignalsRequest) (resp *stock.GetIntradaySignalsResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.GetIntradaySignalsResponse{}, nil
+	}
+
+	var signals []model.IntradaySignal
+	// Default to last 50 signals
+	// If date is provided, we could filter by date, but keeping it simple for now
+	if err := mysql.DB.Order("trigger_time desc").Limit(50).Find(&signals).Error; err != nil {
+		return nil, err
+	}
+
+	var thriftSignals []*stock.IntradaySignal
+	for _, s := range signals {
+		thriftSignals = append(thriftSignals, &stock.IntradaySignal{
+			StockCode:   s.StockCode,
+			SignalType:  s.SignalType,
+			Score:       s.Score,
+			Description: s.Description,
+			TriggerTime: s.TriggerTime.Format(time.RFC3339),
+			TraceId:     s.TraceID,
+		})
+	}
+	return &stock.GetIntradaySignalsResponse{Signals: thriftSignals}, nil
+}
+
+// GetHistoricalKline implements the StockServiceImpl interface.
+func (s *StockServiceImpl) GetHistoricalKline(ctx context.Context, req *stock.GetHistoricalKlineRequest) (resp *stock.GetHistoricalKlineResponse, err error) {
+	// Use EastMoney Client
+	klines, err := s.eastMoneyClient.GetKlineHistory(ctx, req.StockCode, int(req.Days))
+	if err != nil {
+		return nil, err
+	}
+
+	var thriftKlines []*stock.Kline
+	for _, k := range klines {
+		thriftKlines = append(thriftKlines, &stock.Kline{
+			Date:   k.Date,
+			Open:   k.Open,
+			Close:  k.Close,
+			High:   k.High,
+			Low:    k.Low,
+			Volume: k.Volume,
+		})
+	}
+
+	return &stock.GetHistoricalKlineResponse{Klines: thriftKlines}, nil
 }

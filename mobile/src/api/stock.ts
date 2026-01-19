@@ -9,7 +9,10 @@ import {
   MarketAnalysisRequest,
   MarketAnalysisResponse,
   GetSectorStocksResponse,
-  GetDragonTigerListResponse
+  GetDragonTigerListResponse,
+  AddWatchlistResponse,
+  RemoveWatchlistResponse,
+  GetWatchlistResponse
 } from '../types';
 
 export const getRealtime = async (code: string): Promise<RealtimeResponse> => {
@@ -65,5 +68,26 @@ export const getSectorStocks = async (sectorCode: string): Promise<GetSectorStoc
 
 export const getDragonTigerList = async (date: string): Promise<GetDragonTigerListResponse> => {
   const response = await client.get<GetDragonTigerListResponse>(`/api/stock/dragontiger/list?date=${date}`);
+  return response.data;
+};
+
+export const addWatchlist = async (userId: string, stockCode: string): Promise<AddWatchlistResponse> => {
+  const response = await client.post<AddWatchlistResponse>('/api/watchlist/add', {
+    user_id: userId,
+    stock_code: stockCode,
+  });
+  return response.data;
+};
+
+export const removeWatchlist = async (userId: string, stockCode: string): Promise<RemoveWatchlistResponse> => {
+  const response = await client.post<RemoveWatchlistResponse>('/api/watchlist/remove', {
+    user_id: userId,
+    stock_code: stockCode,
+  });
+  return response.data;
+};
+
+export const getWatchlist = async (userId: string): Promise<GetWatchlistResponse> => {
+  const response = await client.get<GetWatchlistResponse>(`/api/watchlist/list?user_id=${userId}`);
   return response.data;
 };

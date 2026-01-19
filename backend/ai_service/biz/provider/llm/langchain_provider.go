@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"stock_assistant/backend/ai_service/biz/tool"
+	"stock_assistant/backend/ai_service/biz/tool/fractal"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
 	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
@@ -54,6 +55,10 @@ func IsTradingTime() bool {
 }
 
 func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days int32, modelName string) (string, float64, string, error) {
+	if modelName == "fractal" {
+		return p.predictWithFractal(ctx, stockCode, days)
+	}
+
 	// 1. Determine ModelConfig
 	var cfg ModelConfig
 	if p.fileConfig != nil {
@@ -264,6 +269,8 @@ Output your final answer starting with "Final Answer:", followed by the detailed
 	newsSummary := "See analysis for details"
 
 	parts := strings.Split(res, "---METADATA---")
+	var metadataMap map[string]interface{}
+
 	if len(parts) > 1 {
 		analysis = strings.TrimSpace(parts[0])
 		metadataJSON := strings.TrimSpace(parts[1])
@@ -280,11 +287,22 @@ Output your final answer starting with "Final Answer:", followed by the detailed
 		if err := json.Unmarshal([]byte(metadataJSON), &metadata); err == nil {
 			confidence = metadata.Confidence
 			newsSummary = metadata.NewsSummary
+
+			// For Langfuse
+			metadataMap = map[string]interface{}{
+				"confidence":   confidence,
+				"news_summary": newsSummary,
+			}
 		} else {
 			log.Printf("Failed to parse metadata JSON: %v. JSON: %s", err, metadataJSON)
 		}
 	} else {
 		log.Printf("Metadata separator not found in response")
+	}
+
+	// Trace with Langfuse
+	if lf := GetLangfuse(); lf != nil {
+		lf.TracePrediction(ctx, stockCode, input, analysis, metadataMap)
 	}
 
 	return analysis, confidence, newsSummary, nil
@@ -488,7 +506,7 @@ func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.S
 	typeCount := make(map[string]int)
 	for _, s := range limitUps {
 		typeCount[s.LimitUpType]++
-		limitUpSummary.WriteString(fmt.Sprintf("- %s: %s, %s, %s\n", s.Name, s.LimitUpType, s.Reason, s.ChangePercent))
+		limitUpSummary.WriteString(fmt.Sprintf("- %s: %s, %s, %.2f%%\n", s.Name, s.LimitUpType, s.Reason, s.ChangePercent))
 	}
 
 	var dtSummary strings.Builder
@@ -631,7 +649,7 @@ func (p *LangChainProvider) AnalyzeMarket(ctx context.Context, sectors []*stock.
 	typeCount := make(map[string]int)
 	for _, s := range limitUps {
 		typeCount[s.LimitUpType]++
-		limitUpSummary.WriteString(fmt.Sprintf("- %s: %s, %s, %s\n", s.Name, s.LimitUpType, s.Reason, s.ChangePercent))
+		limitUpSummary.WriteString(fmt.Sprintf("- %s: %s, %s, %.2f%%\n", s.Name, s.LimitUpType, s.Reason, s.ChangePercent))
 	}
 
 	var dtSummary strings.Builder
@@ -672,6 +690,9 @@ Structure:
 3. **Risks (风险提示)**: What should traders watch out for in the next session? (e.g., high-level divergence, sector rotation failure).
 4. **Opportunities (机会展望)**: Which sectors or themes might lead tomorrow?
 5. **Analysis Summary (分析总结)**: A concise overview of the strategy for tomorrow.
+6. **Policy Impact Score (政策影响评分)**: Rate the current policy environment's impact on the market from -5 (Negative) to +5 (Positive).
+   - Consider sector policies, regulatory tone, and macro news.
+   - 0 is neutral.
 
 Output ONLY a JSON object with the following fields:
 {
@@ -679,7 +700,8 @@ Output ONLY a JSON object with the following fields:
   "recommended_stocks": ["stock1 (Reason)", "stock2 (Reason)"],
   "risks": ["risk1", "risk2"],
   "opportunities": ["opp1", "opp2"],
-  "analysis_summary": "..."
+  "analysis_summary": "...",
+  "policy_score": 2.5
 }
 
 Ensure the response is valid JSON. Do not include markdown formatting like `+"```json"+`.
@@ -721,5 +743,153 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 		}, nil
 	}
 
+	// 7. Calculate Sentiment Score (Deterministic)
+	// Base: 50
+	// Factor 1: Limit Up Count (0-30 -> 0-30 pts)
+	// Factor 2: Broken Limit Up (Negative impact)
+	// Factor 3: Net Inflow (Top Sectors)
+
+	sentimentScore := 50.0
+	limitUpCount := float64(len(limitUps))
+	if limitUpCount > 60 {
+		limitUpCount = 60
+	} // Cap
+	sentimentScore += limitUpCount * 0.5
+
+	// Check broken limit ups
+	brokenCount := 0
+	for _, s := range limitUps {
+		if s.IsBroken {
+			brokenCount++
+		}
+	}
+	sentimentScore -= float64(brokenCount) * 1.0
+
+	// Sector Inflow (Sum of Top 5)
+	inflowSum := 0.0
+	for i, s := range sectors {
+		if i >= 5 {
+			break
+		}
+		inflowSum += s.NetInflow
+	}
+	// Normalize inflow (e.g., 100M -> 1 pt, max 10 pts)
+	// Assuming unit is Wan (10000), so 10000 Wan = 1 Yi.
+	// Let's say 50 Yi inflow is very good.
+	// 50 Yi = 500,000 Wan.
+	inflowScore := inflowSum / 50000.0
+	if inflowScore > 10 {
+		inflowScore = 10
+	}
+	if inflowScore < -10 {
+		inflowScore = -10
+	}
+	sentimentScore += inflowScore
+
+	// Clamp 0-100
+	if sentimentScore > 100 {
+		sentimentScore = 100
+	}
+	if sentimentScore < 0 {
+		sentimentScore = 0
+	}
+
+	analysis.SentimentScore = sentimentScore
+
 	return &analysis, nil
+}
+
+func (p *LangChainProvider) predictWithFractal(ctx context.Context, stockCode string, days int32) (string, float64, string, error) {
+	// 1. Fetch Historical Klines (e.g. 500 days)
+	req := &stock.GetHistoricalKlineRequest{
+		StockCode: stockCode,
+		Days:      500, // Enough history for matching
+	}
+	resp, err := p.stockClient.GetHistoricalKline(ctx, req)
+	if err != nil {
+		return "", 0, "", fmt.Errorf("failed to fetch klines: %v", err)
+	}
+
+	klines := resp.Klines
+	if len(klines) < 60 { // Need at least some history + query pattern
+		return "Insufficient historical data for fractal analysis.", 0, "", nil
+	}
+
+	// 2. Prepare Data
+	// We use Close price for matching
+	closes := make([]float64, len(klines))
+	for i, k := range klines {
+		closes[i] = k.Close
+	}
+
+	// 3. Define Query Pattern (Last 20 days)
+	queryLen := 20
+	if len(closes) < queryLen*2 {
+		return "History too short for pattern matching.", 0, "", nil
+	}
+
+	queryPattern := closes[len(closes)-queryLen:]
+	searchSpace := closes[:len(closes)-queryLen] // Search in the past, excluding current pattern
+
+	// 4. Perform Matching (Pearson Correlation)
+	bestSim := -1.0
+	var bestMatch []float64
+	var bestMatchIdx int
+
+	// Normalize query
+	normQuery := fractal.NormalizeSeries(queryPattern)
+
+	for i := 0; i <= len(searchSpace)-queryLen-int(days); i++ {
+		candidate := searchSpace[i : i+queryLen]
+		normCandidate := fractal.NormalizeSeries(candidate)
+
+		sim := fractal.CalculatePearsonCorrelation(normQuery, normCandidate)
+		if sim > bestSim {
+			bestSim = sim
+			bestMatchIdx = i
+			// Get the NEXT 'days' prices after the match
+			bestMatch = searchSpace[i+queryLen : i+queryLen+int(days)]
+		}
+	}
+
+	if bestMatch == nil {
+		return "No similar pattern found in history.", 0, "", nil
+	}
+
+	// 5. Generate Projection
+	// Calculate the percentage change of the best match's future
+	// and apply it to the current price.
+	currentPrice := closes[len(closes)-1]
+	projection := make([]float64, len(bestMatch))
+
+	startPriceMatch := searchSpace[bestMatchIdx+queryLen-1]
+
+	var analysisBuilder strings.Builder
+	analysisBuilder.WriteString(fmt.Sprintf("Fractal Pattern Match Found (Similarity: %.2f%%)\n", bestSim*100))
+	analysisBuilder.WriteString(fmt.Sprintf("Matched Historical Period: %s\n", klines[bestMatchIdx].Date)) // Approximate date
+	analysisBuilder.WriteString("Projected Path:\n")
+
+	for i, price := range bestMatch {
+		changeRatio := price / startPriceMatch
+		projectedPrice := currentPrice * changeRatio
+		projection[i] = projectedPrice
+		analysisBuilder.WriteString(fmt.Sprintf("Day +%d: %.2f\n", i+1, projectedPrice))
+	}
+
+	trend := "Neutral"
+	if len(projection) > 0 {
+		if projection[len(projection)-1] > currentPrice*1.02 {
+			trend = "Bullish"
+		} else if projection[len(projection)-1] < currentPrice*0.98 {
+			trend = "Bearish"
+		}
+	}
+
+	finalAnalysis := fmt.Sprintf("Based on fractal geometry, the current 20-day price pattern is %.0f%% similar to the pattern starting on %s.\n\nTrend: %s\n\n%s", bestSim*100, klines[bestMatchIdx].Date, trend, analysisBuilder.String())
+
+	// Format metadata
+	metadata := fmt.Sprintf(`---METADATA---
+{"confidence": %.2f, "news_summary": "Fractal analysis based on historical self-similarity."}`, bestSim)
+
+	return finalAnalysis + "\n\n" + metadata, bestSim, "Fractal Pattern Match", nil
 }

@@ -361,6 +361,239 @@ func AnalyzeMarket(ctx context.Context, c *app.RequestContext) {
 		Risks:             rpcResp.Risks,
 		Opportunities:     rpcResp.Opportunities,
 		AnalysisSummary:   rpcResp.AnalysisSummary,
+		SentimentScore:    rpcResp.SentimentScore,
+		PolicyScore:       rpcResp.PolicyScore,
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetMarketSectors .
+// @router /api/market/sectors [GET]
+func GetMarketSectors(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetMarketSectorsRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetMarketSectorsRequest{
+		Type:  req.Type,
+		Limit: req.Limit,
+	}
+	rpcResp, err := rpc.StockClient.GetMarketSectors(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.GetMarketSectorsResponse{
+		Sectors: make([]*api.SectorInfo, 0),
+	}
+	for _, s := range rpcResp.Sectors {
+		resp.Sectors = append(resp.Sectors, &api.SectorInfo{
+			Code:          s.Code,
+			Name:          s.Name,
+			ChangePercent: s.ChangePercent,
+			NetInflow:     s.NetInflow,
+			TopStockName:  s.TopStockName,
+			TopStockCode:  s.TopStockCode,
+			Type:          s.Type,
+		})
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetLimitUpPool .
+// @router /api/market/limit_up [GET]
+func GetLimitUpPool(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetLimitUpPoolRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetLimitUpPoolRequest{
+		Date: req.Date,
+	}
+	rpcResp, err := rpc.StockClient.GetLimitUpPool(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.GetLimitUpPoolResponse{
+		Stocks: make([]*api.LimitUpStock, 0),
+	}
+	for _, s := range rpcResp.Stocks {
+		resp.Stocks = append(resp.Stocks, &api.LimitUpStock{
+			Code:          s.Code,
+			Name:          s.Name,
+			Price:         s.Price,
+			ChangePercent: s.ChangePercent,
+			LimitUpType:   s.LimitUpType,
+			Reason:        s.Reason,
+			IsBroken:      s.IsBroken,
+		})
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetOrCreateUser .
+// @router /api/user/login [POST]
+func GetOrCreateUser(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetOrCreateUserRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetOrCreateUserRequest{
+		Username: req.Username,
+	}
+	rpcResp, err := rpc.StockClient.GetOrCreateUser(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.GetOrCreateUserResponse{}
+	if rpcResp.User != nil {
+		resp.User = &api.User{
+			ID:        rpcResp.User.Id,
+			Username:  rpcResp.User.Username,
+			CreatedAt: rpcResp.User.CreatedAt,
+		}
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// AddWatchlist .
+// @router /api/watchlist/add [POST]
+func AddWatchlist(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.AddWatchlistRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.AddWatchlistRequest{
+		UserId:    req.UserID,
+		StockCode: req.StockCode,
+	}
+	hlog.CtxInfof(ctx, "AddWatchlist Request: UserID=%s, StockCode=%s", req.UserID, req.StockCode)
+
+	rpcResp, err := rpc.StockClient.AddWatchlist(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(consts.StatusOK, &api.AddWatchlistResponse{Success: rpcResp.Success})
+}
+
+// GetWatchlist .
+// @router /api/watchlist/list [GET]
+func GetWatchlist(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetWatchlistRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetWatchlistRequest{
+		UserId: req.UserID,
+	}
+	rpcResp, err := rpc.StockClient.GetWatchlist(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.GetWatchlistResponse{
+		Items: make([]*api.WatchlistItem, 0),
+	}
+	for _, item := range rpcResp.Items {
+		resp.Items = append(resp.Items, &api.WatchlistItem{
+			StockCode: item.StockCode,
+			Tags:      item.Tags,
+			AddedAt:   item.AddedAt,
+		})
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// RemoveWatchlist .
+// @router /api/watchlist/remove [POST]
+func RemoveWatchlist(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.RemoveWatchlistRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.RemoveWatchlistRequest{
+		UserId:    req.UserID,
+		StockCode: req.StockCode,
+	}
+	rpcResp, err := rpc.StockClient.RemoveWatchlist(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(consts.StatusOK, &api.RemoveWatchlistResponse{Success: rpcResp.Success})
+}
+
+// GetHistoricalKline .
+// @router /api/stock/kline [GET]
+func GetHistoricalKline(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.GetHistoricalKlineRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetHistoricalKlineRequest{
+		StockCode: req.StockCode,
+		Days:      req.Days,
+	}
+	rpcResp, err := rpc.StockClient.GetHistoricalKline(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &api.GetHistoricalKlineResponse{
+		Klines: make([]*api.Kline, 0),
+	}
+	for _, k := range rpcResp.Klines {
+		resp.Klines = append(resp.Klines, &api.Kline{
+			Date:   k.Date,
+			Open:   k.Open,
+			Close:  k.Close,
+			High:   k.High,
+			Low:    k.Low,
+			Volume: k.Volume,
+		})
 	}
 
 	c.JSON(consts.StatusOK, resp)

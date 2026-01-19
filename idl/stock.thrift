@@ -73,19 +73,6 @@ struct GetLimitUpPoolResponse {
     1: list<LimitUpStock> stocks
 }
 
-service StockService {
-    GetRealtimeResponse GetRealtime(1: GetRealtimeRequest req)
-    GetFinancialReportResponse GetFinancialReport(1: GetFinancialReportRequest req)
-    
-    // New methods
-    GetMarketSectorsResponse GetMarketSectors(1: GetMarketSectorsRequest req)
-    GetLimitUpPoolResponse GetLimitUpPool(1: GetLimitUpPoolRequest req)
-
-    // Phase 2: Sector Details & Dragon Tiger List
-    GetSectorStocksResponse GetSectorStocks(1: GetSectorStocksRequest req)
-    GetDragonTigerListResponse GetDragonTigerList(1: GetDragonTigerListRequest req)
-}
-
 struct SectorStockItem {
     1: string code
     2: string name
@@ -129,4 +116,123 @@ struct GetDragonTigerListRequest {
 
 struct GetDragonTigerListResponse {
     1: list<DragonTigerItem> items
+}
+
+// --- Smart Trading Enhancement Suite ---
+
+// User Identity
+struct User {
+    1: string id
+    2: string username
+    3: string created_at
+}
+
+struct GetOrCreateUserRequest {
+    1: string username
+}
+
+struct GetOrCreateUserResponse {
+    1: User user
+}
+
+// Cloud Watchlist
+struct WatchlistItem {
+    1: string stock_code
+    2: list<string> tags
+    3: string added_at
+}
+
+struct AddWatchlistRequest {
+    1: string user_id
+    2: string stock_code
+}
+
+struct AddWatchlistResponse {
+    1: bool success
+}
+
+struct GetWatchlistRequest {
+    1: string user_id
+}
+
+struct GetWatchlistResponse {
+    1: list<WatchlistItem> items
+}
+
+struct RemoveWatchlistRequest {
+    1: string user_id
+    2: string stock_code
+}
+
+struct RemoveWatchlistResponse {
+    1: bool success
+}
+
+// Intraday Signal
+struct IntradaySignal {
+    1: string stock_code
+    2: string signal_type
+    3: double score
+    4: string description
+    5: string trigger_time
+    6: string trace_id
+}
+
+struct SaveIntradaySignalRequest {
+    1: IntradaySignal signal
+}
+
+struct SaveIntradaySignalResponse {
+    1: bool success
+}
+
+struct GetIntradaySignalsRequest {
+    1: string date // Optional, YYYY-MM-DD
+}
+
+struct GetIntradaySignalsResponse {
+    1: list<IntradaySignal> signals
+}
+
+// Fractal Prediction
+struct Kline {
+    1: string date
+    2: double open
+    3: double close
+    4: double high
+    5: double low
+    6: i64 volume
+}
+
+struct GetHistoricalKlineRequest {
+    1: string stock_code
+    2: i32 days // Number of days to retrieve
+}
+
+struct GetHistoricalKlineResponse {
+    1: list<Kline> klines
+}
+
+service StockService {
+    GetRealtimeResponse GetRealtime(1: GetRealtimeRequest req)
+    GetFinancialReportResponse GetFinancialReport(1: GetFinancialReportRequest req)
+    
+    // New methods
+    GetMarketSectorsResponse GetMarketSectors(1: GetMarketSectorsRequest req)
+    GetLimitUpPoolResponse GetLimitUpPool(1: GetLimitUpPoolRequest req)
+
+    // Phase 2: Sector Details & Dragon Tiger List
+    GetSectorStocksResponse GetSectorStocks(1: GetSectorStocksRequest req)
+    GetDragonTigerListResponse GetDragonTigerList(1: GetDragonTigerListRequest req)
+
+    // Smart Trading Enhancement Suite
+    GetOrCreateUserResponse GetOrCreateUser(1: GetOrCreateUserRequest req)
+    AddWatchlistResponse AddWatchlist(1: AddWatchlistRequest req)
+    GetWatchlistResponse GetWatchlist(1: GetWatchlistRequest req)
+    RemoveWatchlistResponse RemoveWatchlist(1: RemoveWatchlistRequest req)
+    
+    SaveIntradaySignalResponse SaveIntradaySignal(1: SaveIntradaySignalRequest req)
+    GetIntradaySignalsResponse GetIntradaySignals(1: GetIntradaySignalsRequest req)
+    
+    GetHistoricalKlineResponse GetHistoricalKline(1: GetHistoricalKlineRequest req)
 }

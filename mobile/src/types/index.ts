@@ -92,3 +92,21 @@ export interface DragonTigerItem {
 export interface GetDragonTigerListResponse {
   items: DragonTigerItem[];
 }
+
+export interface AddWatchlistResponse {
+  success: boolean;
+}
+
+export interface RemoveWatchlistResponse {
+  success: boolean;
+}
+
+export interface WatchlistItem {
+  stock_code: string;
+  tags: string[];
+  added_at: string;
+}
+
+export interface GetWatchlistResponse {
+  items: WatchlistItem[];
+}

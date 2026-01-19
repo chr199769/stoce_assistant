@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # --- Knowledge Graph ---
+  neo4j:
+    image: neo4j:5.15.0-community
+    container_name: stock_neo4j
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/password # Change in production
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+  # --- Prediction Tracking & Eval ---
+  # Langfuse requires Postgres
+  langfuse-db:
+    image: postgres:16
+    container_name: stock_langfuse_db
+    restart: always
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse_password
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+
+  langfuse-server:
+    image: langfuse/langfuse:2
+    container_name: stock_langfuse
+    depends_on:
+      - langfuse-db
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://langfuse:langfuse_password@langfuse-db:5432/langfuse"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXTAUTH_SECRET: "mysecret" # Change in production
+      SALT: "mysalt" # Change in production
+      TELEMETRY_ENABLED: "false"
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  langfuse_db_data:

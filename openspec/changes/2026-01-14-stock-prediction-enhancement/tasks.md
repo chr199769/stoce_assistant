@@ -21,15 +21,15 @@
     - `/api/dragon-tiger/list`
 
 ## Phase 3: AI Logic Enhancement (Business Logic)
-- [ ] 3.1 优化 `PredictionProvider`：
+- [x] 3.1 优化 `PredictionProvider`：
     - 更新 Prompt，加入“板块共振”因子。
     - 集成 `SectorTool` 数据到预测上下文中。
 
 ## Phase 4: Frontend Implementation (Visible Changes)
-- [ ] 4.1 开发板块详情页 (`SectorDetailScreen.tsx`)：
+- [x] 4.1 开发板块详情页 (`SectorDetailScreen.tsx`)：
     - 展示龙头股（带标签）、成份股列表。
-- [ ] 4.2 开发龙虎榜页 (`DragonTigerScreen.tsx`)：
+- [x] 4.2 开发龙虎榜页 (`DragonTigerScreen.tsx`)：
     - 展示每日上榜个股及席位详情。
-- [ ] 4.3 集成与导航 (`AppNavigator`, `SummaryScreen`)：
+- [x] 4.3 集成与导航 (`AppNavigator`, `SummaryScreen`)：
     - 添加导航路由。
     - 在大盘总结页添加入口。
