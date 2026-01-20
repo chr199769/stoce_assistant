@@ -311,14 +311,24 @@ func (s *StockServiceImpl) AddWatchlist(ctx context.Context, req *stock.AddWatch
 		return &stock.AddWatchlistResponse{Success: false}, nil
 	}
 
+	// Normalize stock code
+	code := strings.TrimSpace(req.StockCode)
+	if len(code) == 6 {
+		if strings.HasPrefix(code, "6") {
+			code = "sh" + code
+		} else if strings.HasPrefix(code, "0") || strings.HasPrefix(code, "3") {
+			code = "sz" + code
+		}
+	}
+
 	item := model.UserWatchlist{
 		UserID:    req.UserId,
-		StockCode: req.StockCode,
+		StockCode: code,
 		Tags:      "[]", // Default empty JSON array
 	}
 	// Check if exists
 	var count int64
-	mysql.DB.Model(&model.UserWatchlist{}).Where("user_id = ? AND stock_code = ?", req.UserId, req.StockCode).Count(&count)
+	mysql.DB.Model(&model.UserWatchlist{}).Where("user_id = ? AND stock_code = ?", req.UserId, code).Count(&count)
 	if count > 0 {
 		return &stock.AddWatchlistResponse{Success: true}, nil
 	}
@@ -372,7 +382,17 @@ func (s *StockServiceImpl) RemoveWatchlist(ctx context.Context, req *stock.Remov
 		return &stock.RemoveWatchlistResponse{Success: false}, nil
 	}
 
-	if err := mysql.DB.Where("user_id = ? AND stock_code = ?", req.UserId, req.StockCode).Delete(&model.UserWatchlist{}).Error; err != nil {
+	// Normalize stock code
+	code := strings.TrimSpace(req.StockCode)
+	if len(code) == 6 {
+		if strings.HasPrefix(code, "6") {
+			code = "sh" + code
+		} else if strings.HasPrefix(code, "0") || strings.HasPrefix(code, "3") {
+			code = "sz" + code
+		}
+	}
+
+	if err := mysql.DB.Where("user_id = ? AND stock_code = ?", req.UserId, code).Delete(&model.UserWatchlist{}).Error; err != nil {
 		return &stock.RemoveWatchlistResponse{Success: false}, nil
 	}
 	return &stock.RemoveWatchlistResponse{Success: true}, nil

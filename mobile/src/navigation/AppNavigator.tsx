@@ -9,7 +9,6 @@ import SummaryScreen from '../screens/SummaryScreen';
 import DragonTigerScreen from '../screens/DragonTigerScreen';
 import SectorDetailScreen from '../screens/SectorDetailScreen';
 import LoginScreen from '../screens/LoginScreen';
-import WatchlistScreen from '../screens/WatchlistScreen';
 import { useAuth } from '../context/AuthContext';
 import { Text } from 'react-native-paper';
 
@@ -24,7 +23,6 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Home: undefined;
-  Watchlist: undefined;
   Summary: undefined;
   MarketAnalysis: undefined;
   DragonTigerTab: undefined;
@@ -41,7 +39,6 @@ const TabNavigator = () => {
         tabBarIcon: ({ color, size }) => {
           let iconName = '';
           if (route.name === 'Home') iconName = '🏠';
-          else if (route.name === 'Watchlist') iconName = '⭐';
           else if (route.name === 'Summary') iconName = '📝';
           else if (route.name === 'MarketAnalysis') iconName = '🔮';
           else if (route.name === 'DragonTigerTab') iconName = '🐉';
@@ -56,11 +53,6 @@ const TabNavigator = () => {
         name="Home"
         component={HomeScreen}
         options={{ title: '首页' }}
-      />
-      <Tab.Screen
-        name="Watchlist"
-        component={WatchlistScreen}
-        options={{ title: '自选' }}
       />
       <Tab.Screen
         name="Summary"

@@ -6,7 +6,7 @@ require (
 	github.com/cloudwego/gopkg v0.1.8
 	github.com/cloudwego/kitex v0.15.4
 	github.com/cloudwego/kitex/pkg/protocol/bthrift v0.0.0-20260112072316-5cf426cf9e1b
-	github.com/langfuse/langfuse-go v0.0.0-20250303121915-2493e318198e
+	github.com/google/uuid v1.6.0
 	github.com/tmc/langchaingo v0.1.14
 )
 
@@ -33,12 +33,12 @@ require (
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/pprof v0.0.0-20240727154555-813a5fbdbec8 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/huandu/xstrings v1.3.3 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/jhump/protoreflect v1.8.2 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect

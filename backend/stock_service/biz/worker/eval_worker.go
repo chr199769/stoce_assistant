@@ -3,37 +3,44 @@ package worker
 import (
 	"context"
 	"log"
-	"os"
+	"strings"
+
+	// "os"
+
 	"time"
 
-	"github.com/langfuse/langfuse-go"
+	// "github.com/langfuse/langfuse-go"
 	"stock_assistant/backend/stock_service/biz/provider/sina"
 	"stock_assistant/backend/stock_service/dal/model"
 	"stock_assistant/backend/stock_service/dal/mysql"
 )
 
 type EvalWorker struct {
-	lf *langfuse.Client
+	// lf *langfuse.Client
 }
 
 func NewEvalWorker() *EvalWorker {
 	// Initialize Langfuse client
-	publicKey := os.Getenv("LANGFUSE_PUBLIC_KEY")
-	secretKey := os.Getenv("LANGFUSE_SECRET_KEY")
-	host := os.Getenv("LANGFUSE_HOST")
+	/*
+		publicKey := os.Getenv("LANGFUSE_PUBLIC_KEY")
+		secretKey := os.Getenv("LANGFUSE_SECRET_KEY")
+		host := os.Getenv("LANGFUSE_HOST")
 
-	var lf *langfuse.Client
-	if publicKey != "" && secretKey != "" {
-		lf = langfuse.New(
-			langfuse.WithPublicKey(publicKey),
-			langfuse.WithSecretKey(secretKey),
-			langfuse.WithHost(host),
-		)
-	} else {
-		log.Println("[EvalWorker] Warning: LANGFUSE credentials missing. Skipping Langfuse integration.")
-	}
+		var lf *langfuse.Client
+		if publicKey != "" && secretKey != "" {
+			lf = langfuse.New(
+				langfuse.WithPublicKey(publicKey),
+				langfuse.WithSecretKey(secretKey),
+				langfuse.WithHost(host),
+			)
+		} else {
+			log.Println("[EvalWorker] Warning: LANGFUSE credentials missing. Skipping Langfuse integration.")
+		}
 
-	return &EvalWorker{lf: lf}
+		return &EvalWorker{lf: lf}
+	*/
+	log.Println("[EvalWorker] Langfuse integration disabled temporarily due to build issues.")
+	return &EvalWorker{}
 }
 
 func (w *EvalWorker) Start() {
@@ -79,6 +86,17 @@ func (w *EvalWorker) Evaluate() {
 	sinaClient := sina.NewClient()
 
 	for _, sig := range signals {
+		// Skip sector codes (BKxxxx) for now as Sina API doesn't support them directly
+		if strings.HasPrefix(sig.StockCode, "BK") {
+			log.Printf("[EvalWorker] Skipping sector signal %s (not supported for evaluation yet)", sig.StockCode)
+			// Mark as evaluated (using -1 to indicate skipped/not-applicable) so we don't pick it up again
+			sig.Score = -1.0
+			if err := mysql.DB.Save(&sig).Error; err != nil {
+				log.Printf("[EvalWorker] Failed to update skipped signal %d: %v", sig.ID, err)
+			}
+			continue
+		}
+
 		// Get current price
 		info, err := sinaClient.GetStockInfo(context.Background(), sig.StockCode)
 		if err != nil {
@@ -103,18 +121,20 @@ func (w *EvalWorker) Evaluate() {
 		}
 
 		// Send to Langfuse
-		if w.lf != nil && sig.TraceID != "" {
-			_, err := w.lf.Score(context.Background(), &langfuse.ScoreBody{
-				TraceId: sig.TraceID,
-				Name:    "accuracy",
-				Value:   score,
-				Comment: "Automated evaluation by EvalWorker (Sina Finance)",
-			})
-			if err != nil {
-				log.Printf("[EvalWorker] Failed to send score to Langfuse: %v", err)
-			} else {
-				log.Printf("[EvalWorker] Scored trace %s with %f", sig.TraceID, score)
+		/*
+			if w.lf != nil && sig.TraceID != "" {
+				_, err := w.lf.Score(context.Background(), &langfuse.ScoreBody{
+					TraceId: sig.TraceID,
+					Name:    "accuracy",
+					Value:   score,
+					Comment: "Automated evaluation by EvalWorker (Sina Finance)",
+				})
+				if err != nil {
+					log.Printf("[EvalWorker] Failed to send score to Langfuse: %v", err)
+				} else {
+					log.Printf("[EvalWorker] Scored trace %s with %f", sig.TraceID, score)
+				}
 			}
-		}
+		*/
 	}
 }

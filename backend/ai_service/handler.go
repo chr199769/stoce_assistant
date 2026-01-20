@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
-	"path/filepath"
 	"stock_assistant/backend/ai_service/biz/provider/llm"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
@@ -19,43 +17,16 @@ type AIServiceImpl struct {
 	stockClient stockservice.Client
 }
 
-func NewAIServiceImpl() *AIServiceImpl {
-	cwd, _ := os.Getwd()
-	log.Printf("Current working directory: %s", cwd)
-
+func NewAIServiceImpl(llmConfig *llm.FileConfig) *AIServiceImpl {
 	c, err := stockservice.NewClient("stock_service", client.WithHostPorts("localhost:8888"))
 	if err != nil {
 		log.Printf("failed to init stock client: %v", err)
 	}
 
-	// Try to find config file
-	configPath := "conf/llm_config.json"
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Try absolute path if relative fails
-		configPath = filepath.Join(cwd, "conf/llm_config.json")
-		log.Printf("Config not found at relative path, trying: %s", configPath)
-	}
-
-	// Read config from file
-	fileConfig, err := llm.LoadFileConfig(configPath)
-	if err != nil {
-		log.Printf("failed to read config file from %s: %v, falling back to empty config", configPath, err)
-		fileConfig = nil
-	} else {
-		log.Printf("Successfully loaded config from %s", configPath)
-	}
-
-	p, err := llm.NewLangChainProvider(context.Background(), c, fileConfig)
+	p, err := llm.NewLangChainProvider(context.Background(), c, llmConfig)
 	if err != nil {
 		log.Printf("failed to init langchain provider: %v", err)
-		// return &AIServiceImpl{llmProvider: llm.NewMockProvider()}
-		// Instead of mock, we return a provider that is nil or error prone?
-		// Since NewLangChainProvider now returns error if config is missing.
 		// We should probably panic here if we strictly don't want mock.
-		// Or return a service that has nil provider and check in methods.
-		// Let's allow p to be nil but handle it in methods?
-		// No, let's make NewLangChainProvider return a valid provider even if config is empty?
-		// But I changed it to return error.
 		// So let's just log fatal.
 		log.Fatalf("Critical: Failed to init LLM provider and mock is disabled: %v", err)
 	}
