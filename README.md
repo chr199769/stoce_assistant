@@ -22,23 +22,31 @@ Stock Assistant 是一款专为个人 A 股投资者设计的智能监控与分�
 ### 架构图
 
 ```mermaid
-graph TD
-    Client[移动端 (React Native)] -->|HTTP/JSON| Gateway[API 网关 (Hertz)]
+flowchart TD
+    %% 样式定义
+    classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef gateway fill:#fff9c4,stroke:#fbc02d,stroke-width:2px;
+    classDef service fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    classDef external fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef storage fill:#fbe9e7,stroke:#d84315,stroke-width:2px;
+
+    Client["移动端 (React Native)"]:::client -->|HTTP/JSON| Gateway["API 网关 (Hertz)"]:::gateway
     
-    subgraph Backend [微服务集群]
-        Gateway -->|Thrift/RPC| StockService[股票服务 (Kitex)]
-        Gateway -->|Thrift/RPC| AIService[AI 服务 (Kitex)]
+    subgraph Backend ["微服务集群"]
+        direction TB
+        Gateway -->|Thrift/RPC| StockService["股票服务 (Kitex)"]:::service
+        Gateway -->|Thrift/RPC| AIService["AI 服务 (Kitex)"]:::service
     end
     
-    subgraph External [外部依赖]
-        StockService -->|HTTP| SinaAPI[新浪财经]
-        StockService -->|HTTP| EastMoney[东方财富]
-        AIService -->|API| LLM[大模型 (OpenAI/Qwen/DeepSeek)]
+    subgraph External ["外部依赖"]
+        StockService -->|HTTP| SinaAPI["新浪财经"]:::external
+        StockService -->|HTTP| EastMoney["东方财富"]:::external
+        AIService -->|API| LLM["大模型 (OpenAI/Qwen/DeepSeek)"]:::external
     end
     
-    subgraph Storage [数据存储]
-        StockService --> MySQL[(PostgreSQL)]
-        StockService --> Redis[(Redis)]
+    subgraph Storage ["数据存储"]
+        StockService --> MySQL[("PostgreSQL")]:::storage
+        StockService --> Redis[("Redis")]:::storage
     end
 ```
 
