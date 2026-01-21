@@ -42,8 +42,8 @@ services:
       LANGFUSE_HOST: "http://langfuse-server:3000"
       # Use keys from config or env if needed. Assuming config file inside container handles it if env vars are missing,
       # but we can override here.
-      LANGFUSE_PUBLIC_KEY: "pk-lf-e120eb7e-2392-4225-9a46-6d4c14999e6d"
-      LANGFUSE_SECRET_KEY: "sk-lf-f8e9f0e7-1ea5-4c4a-afa3-a1344d5aaa5a"
+      LANGFUSE_PUBLIC_KEY: "pk-lf-your-public-key-here"
+      LANGFUSE_SECRET_KEY: "sk-lf-your-secret-key-here"
 
   # --- Prediction Tracking & Eval ---
   # Langfuse requires Postgres, ClickHouse, Redis
