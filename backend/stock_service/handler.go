@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"stock_assistant/backend/stock_service/biz/provider/eastmoney"
+	eastmoney "stock_assistant/backend/common/eastmoney"
 	"stock_assistant/backend/stock_service/biz/provider/sentiment"
 	"stock_assistant/backend/stock_service/biz/provider/sina"
 	"stock_assistant/backend/stock_service/dal/redis"
@@ -62,8 +62,20 @@ func (s *StockServiceImpl) GetFinancialReport(ctx context.Context, req *stock.Ge
 		return nil, err
 	}
 
+	var thriftReports []*stock.FinancialData
+	for _, r := range reports {
+		thriftReports = append(thriftReports, &stock.FinancialData{
+			ReportDate:   r.ReportDate,
+			TotalRevenue: r.TotalRevenue,
+			NetProfit:    r.NetProfit,
+			Eps:          r.Eps,
+			RevenueYoy:   r.RevenueYoy,
+			ProfitYoy:    r.ProfitYoy,
+		})
+	}
+
 	return &stock.GetFinancialReportResponse{
-		Reports: reports,
+		Reports: thriftReports,
 	}, nil
 }
 

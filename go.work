@@ -5,4 +5,5 @@ use (
 	./backend/gateway
 	./backend/stock_service
 	./backend/verify_client
+	./backend/common
 )

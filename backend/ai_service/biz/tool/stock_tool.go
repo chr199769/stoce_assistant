@@ -7,6 +7,8 @@ import (
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
 	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 	"strings"
+
+	eastmoney "stock_assistant/backend/common/eastmoney"
 )
 
 type StockPriceTool struct {
@@ -66,10 +68,13 @@ func (t *StockPriceTool) Call(ctx context.Context, input string) (string, error)
 }
 
 type StockAnalysisTool struct {
+	EastMoneyClient *eastmoney.Client
 }
 
 func NewStockAnalysisTool() *StockAnalysisTool {
-	return &StockAnalysisTool{}
+	return &StockAnalysisTool{
+		EastMoneyClient: eastmoney.NewClient(),
+	}
 }
 
 func (t *StockAnalysisTool) Name() string {
@@ -106,47 +111,69 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 
 	// Fetch data
 	// 1. Industry
-	industry, err := GetIndustryIndex(input)
+	industryData, err := t.EastMoneyClient.GetIndustryIndex(ctx, input)
+	industry := "Error fetching industry info"
 	if err != nil {
 		log.Printf("Error fetching industry: %v", err)
-		industry = "Error fetching industry info"
+	} else {
+		industry = industryData.String()
 	}
 
 	// 2. Order Book
-	orders, err := GetOrderBook(input)
+	ordersData, err := t.EastMoneyClient.GetOrderBook(ctx, input)
+	orders := "Error fetching order book"
 	if err != nil {
 		log.Printf("Error fetching order book: %v", err)
-		orders = "Error fetching order book"
+	} else {
+		orders = ordersData.String()
 	}
 
 	// 3. Chip Distribution
-	chip, err := GetChipDistribution(input)
+	chipData, err := t.EastMoneyClient.GetChipDistribution(ctx, input)
+	chip := "Error fetching chip distribution"
 	if err != nil {
 		log.Printf("Error fetching chip distribution: %v", err)
-		chip = "Error fetching chip distribution"
+	} else if chipData == nil {
+		chip = "No chip distribution data available"
+	} else {
+		chip = chipData.String()
 	}
 
 	// 4. Dragon Tiger History
-	lhb, err := GetDragonTigerHistory(input, 5)
+	lhbData, err := t.EastMoneyClient.GetDragonTigerHistory(ctx, input, 5)
+	var lhb []string
 	if err != nil {
 		log.Printf("Error fetching LHB history: %v", err)
+	} else {
+		for _, item := range lhbData {
+			lhb = append(lhb, item.String())
+		}
 	}
 
 	// 6. Stock Heat (Sentiment)
-	heat, err := GetStockHeat(input)
+	heatData, err := t.EastMoneyClient.GetStockHeat(ctx, input)
+	heat := "Error fetching stock heat"
 	if err != nil {
 		log.Printf("Error fetching stock heat: %v", err)
-		heat = "Error fetching stock heat"
+	} else if heatData == nil {
+		heat = "Guba Rank: >100 (Not in Top 100)"
+	} else {
+		heat = heatData.String()
 	}
 
 	// 7. Regulatory Notices (Risk)
-	notices, err := GetStockNotices(input, []string{"监管", "问询", "关注函", "立案", "警示"})
+	noticesData, err := t.EastMoneyClient.GetStockNotices(ctx, input, []string{"监管", "问询", "关注函", "立案", "警示"})
+	var notices []string
 	if err != nil {
 		log.Printf("Error fetching notices: %v", err)
+	} else {
+		for _, item := range noticesData {
+			notices = append(notices, item.String())
+		}
 	}
 
 	// 8. Quantitative Risk Control (Severe Abnormal Fluctuation)
-	riskCheck := CheckRiskControlRules(input)
+	riskCheck := CheckRiskControlRules(ctx, t.EastMoneyClient, input)
 
 	// Format output
 	var sb strings.Builder

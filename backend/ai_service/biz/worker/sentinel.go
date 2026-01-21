@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"stock_assistant/backend/ai_service/biz/tool/eastmoney"
+	eastmoney "stock_assistant/backend/common/eastmoney"
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
 	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 

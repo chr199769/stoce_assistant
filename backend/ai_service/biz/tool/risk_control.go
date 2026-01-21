@@ -1,13 +1,15 @@
 package tool
 
 import (
+	"context"
 	"fmt"
-	"strconv"
 	"strings"
+
+	eastmoney "stock_assistant/backend/common/eastmoney"
 )
 
 // CheckRiskControlRules checks for severe abnormal fluctuations
-func CheckRiskControlRules(code string) string {
+func CheckRiskControlRules(ctx context.Context, client *eastmoney.Client, code string) string {
 	var benchmarkSecId string
 	var boardName string
 
@@ -36,8 +38,8 @@ func CheckRiskControlRules(code string) string {
 
 	// Fetch data (60 days for stock to ensure enough history for 30-day calc, 60 for benchmark)
 	// We need index 30 (31st data point) for 30-day deviation check
-	stockK, err1 := GetKLineData(cleanCode, 60)
-	benchK, err2 := GetKLineData(benchmarkSecId, 60)
+	stockK, err1 := client.GetKlineHistory(ctx, cleanCode, 60)
+	benchK, err2 := client.GetKlineHistory(ctx, benchmarkSecId, 60)
 
 	if err1 != nil || err2 != nil {
 		return fmt.Sprintf("无法进行量化风控检查: 数据获取失败 (StockErr: %v, BenchErr: %v)", err1, err2)
@@ -45,26 +47,17 @@ func CheckRiskControlRules(code string) string {
 
 	// Map benchmark data by date (Close Price for interval calc)
 	benchCloseMap := make(map[string]float64)
-	for _, line := range benchK {
-		parts := strings.Split(line, ",")
-		if len(parts) > 1 {
-			// Format: Date, Close, Volume, ChangePct
-			val, _ := strconv.ParseFloat(parts[1], 64)
-			benchCloseMap[parts[0]] = val
-		}
+	for _, item := range benchK {
+		benchCloseMap[item.Date] = item.Close
 	}
 
 	// Filter valid trading days from stockK (reverse order: latest to oldest)
-	var validStockK []string
+	var validStockK []*eastmoney.KlineItem
 	for i := len(stockK) - 1; i >= 0; i-- {
-		parts := strings.Split(stockK[i], ",")
-		if len(parts) <= 3 {
-			continue
-		}
+		item := stockK[i]
 		// Check for non-trading days (Volume = 0)
-		vol, _ := strconv.ParseFloat(parts[2], 64)
-		if vol > 0 {
-			validStockK = append(validStockK, stockK[i])
+		if item.Volume > 0 {
+			validStockK = append(validStockK, item)
 		}
 	}
 
@@ -76,9 +69,8 @@ func CheckRiskControlRules(code string) string {
 		}
 
 		// End Date Data (Latest)
-		endParts := strings.Split(validStockK[0], ",")
-		endClose, _ := strconv.ParseFloat(endParts[1], 64)
-		endDate := endParts[0]
+		endClose := validStockK[0].Close
+		endDate := validStockK[0].Date
 
 		// Start Date Data (The day BEFORE the interval starts)
 		// For 10 days interval, we need the closing price of the 11th day back as base
@@ -88,15 +80,14 @@ func CheckRiskControlRules(code string) string {
 			fmt.Printf("[RiskControl] Warning: Data length (%d) <= days (%d), using oldest available day index %d\n", len(validStockK), days, actualDays)
 		}
 
-		startParts := strings.Split(validStockK[actualDays], ",")
-		startClose, _ := strconv.ParseFloat(startParts[1], 64)
-		baseDate := startParts[0]
+		startClose := validStockK[actualDays].Close
+		baseDate := validStockK[actualDays].Date
 
 		// Get Interval Start Date (T-(days-1)) for display clarity
 		// This is the first day INCLUDED in the interval
 		intervalStartDate := "N/A"
 		if actualDays > 0 {
-			intervalStartDate = strings.Split(validStockK[actualDays-1], ",")[0]
+			intervalStartDate = validStockK[actualDays-1].Date
 		}
 
 		// Calculate Stock Interval Pct
