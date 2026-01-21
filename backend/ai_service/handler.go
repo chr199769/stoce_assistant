@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"stock_assistant/backend/ai_service/biz/provider/llm"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
@@ -18,7 +19,11 @@ type AIServiceImpl struct {
 }
 
 func NewAIServiceImpl(llmConfig *llm.FileConfig) *AIServiceImpl {
-	c, err := stockservice.NewClient("stock_service", client.WithHostPorts("localhost:8888"))
+	stockAddr := os.Getenv("STOCK_SERVICE_ADDR")
+	if stockAddr == "" {
+		stockAddr = "localhost:8888"
+	}
+	c, err := stockservice.NewClient("stock_service", client.WithHostPorts(stockAddr))
 	if err != nil {
 		log.Printf("failed to init stock client: %v", err)
 	}

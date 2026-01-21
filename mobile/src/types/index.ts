@@ -12,6 +12,7 @@ export interface PredictionResponse {
   confidence: number;
   analysis: string;
   news_summary: string;
+  model?: string; // Optional field to track which model was used
 }
 
 export interface PredictionRequest {
@@ -53,6 +54,20 @@ export interface MarketAnalysisResponse {
   risks: string[];
   opportunities: string[];
   analysis_summary: string;
+}
+
+export interface SectorInfo {
+  code: string;
+  name: string;
+  change_percent: number;
+  net_inflow: number;
+  top_stock_name: string;
+  top_stock_code: string;
+  type: string;
+}
+
+export interface GetMarketSectorsResponse {
+  sectors: SectorInfo[];
 }
 
 // Phase 2: Sector & Dragon Tiger Types

@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"stock_assistant/backend/ai_service/biz/provider/llm"
+
+	"stock_assistant/backend/stock_service/biz/provider/langfuse"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	LLMConfig *llm.FileConfig
-	Langfuse  *llm.LangfuseConfig
+	Langfuse *langfuse.LangfuseConfig `json:"langfuse"`
 }
 
 var globalConfig *Config
@@ -25,31 +25,19 @@ func Init() error {
 
 	// Load LLM Config
 	cwd, _ := os.Getwd()
-	configPath := "conf/llm_config.json"
+	configPath := "conf/prod.json"
 	// Try absolute path if relative fails
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		configPath = filepath.Join(cwd, "conf/llm_config.json")
+		configPath = filepath.Join(cwd, "conf/prod.json")
 	}
 	file, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// 1. Unmarshal LLM Config
-	llmConfig := &llm.FileConfig{}
-	if err := json.Unmarshal(file, llmConfig); err != nil {
-		return fmt.Errorf("failed to unmarshal llm config: %w", err)
-	}
-	cfg.LLMConfig = llmConfig
-
-	// 2. Unmarshal Langfuse Config
-	var wrapper struct {
-		Langfuse *llm.LangfuseConfig `json:"langfuse"`
-	}
-	if err := json.Unmarshal(file, &wrapper); err != nil {
+	if err := json.Unmarshal(file, &cfg); err != nil {
 		fmt.Printf("Warning: failed to unmarshal langfuse config: %v\n", err)
 	}
-	cfg.Langfuse = wrapper.Langfuse
 
 	globalConfig = cfg
 	return nil

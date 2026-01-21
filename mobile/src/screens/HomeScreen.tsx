@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar, TouchableOpacity } from 'react-native';
-import { Card, Text, FAB, Dialog, Portal, TextInput, Button, ActivityIndicator, Divider } from 'react-native-paper';
+import { Card, Text, FAB, Dialog, Portal, TextInput, Button, ActivityIndicator, Divider, SegmentedButtons, Chip } from 'react-native-paper';
 import { getRealtime, recognizeStockImage, getPrediction, addWatchlist, removeWatchlist, getWatchlist } from '../api/stock';
 import { RealtimeResponse, PredictionResponse } from '../types';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
+import FractalChart, { FractalData } from '../components/FractalChart';
 
 const WATCHLIST_KEY = 'stock_watchlist';
 
@@ -21,6 +22,12 @@ const HomeScreen = () => {
   const [predictions, setPredictions] = useState<{ [key: string]: PredictionResponse }>({});
   const [predicting, setPredicting] = useState<{ [key: string]: boolean }>({});
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
+  const [singlePredictCode, setSinglePredictCode] = useState('');
+  const [singlePredictLoading, setSinglePredictLoading] = useState(false);
+  const [predictionDialogVisible, setPredictionDialogVisible] = useState(false);
+  const [currentPrediction, setCurrentPrediction] = useState<PredictionResponse | null>(null);
+  const [currentFractalData, setCurrentFractalData] = useState<FractalData | null>(null);
+  const [selectedModel, setSelectedModel] = useState('glm-4.6v-flash');
 
   const { user } = useAuth();
   const navigation = useNavigation();
@@ -242,31 +249,37 @@ const HomeScreen = () => {
     }
   };
 
+  const parseMetadata = (analysis: string) => {
+    const parts = analysis.split('---METADATA---');
+    if (parts.length > 1) {
+      try {
+        const metadataJson = parts[1].trim();
+        const metadata = JSON.parse(metadataJson);
+        return {
+            text: parts[0].trim(),
+            fractalData: metadata.fractal_data || null
+        };
+      } catch (e) {
+        console.error("Failed to parse metadata", e);
+      }
+    }
+    return { text: analysis, fractalData: null };
+  };
+
   const handlePredict = async (code: string) => {
-    if (expandedStock === code) {
-      setExpandedStock(null);
-      return;
-    }
+    // Navigate to Prediction Screen directly with the selected model
+    // @ts-ignore
+    navigation.navigate('Prediction', { code, model: selectedModel });
+  };
 
-    setExpandedStock(code);
-
-    if (predictions[code]) return; // Already have data
-
-    setPredicting(prev => ({ ...prev, [code]: true }));
-    try {
-      const res = await getPrediction({
-        code,
-        days: 3,
-        include_news: true,
-        model: 'doubao-pro-32k'
-      });
-      setPredictions(prev => ({ ...prev, [code]: res }));
-    } catch (error) {
-      console.error('Prediction failed', error);
-      Alert.alert('错误', '获取预测失败');
-    } finally {
-      setPredicting(prev => ({ ...prev, [code]: false }));
-    }
+  const handleSinglePredict = async () => {
+    if (!singlePredictCode) return;
+    const code = singlePredictCode.trim().toLowerCase();
+    if (!code) return;
+    
+    // Use the same handlePredict logic but clear input
+    await handlePredict(code);
+    setSinglePredictCode('');
   };
 
   const getColor = (change: number) => {
@@ -280,6 +293,34 @@ const HomeScreen = () => {
       <SafeAreaView style={styles.headerContainer}>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>股票助手</Text>
+        </View>
+        <View style={styles.predictInputContainer}>
+          <TextInput
+            placeholder="输入股票代码预测 (如 sh600519)"
+            value={singlePredictCode}
+            onChangeText={setSinglePredictCode}
+            mode="outlined"
+            style={styles.predictInput}
+            dense
+            right={<TextInput.Icon icon="crystal-ball" onPress={handleSinglePredict} />}
+            onSubmitEditing={handleSinglePredict}
+          />
+          <View style={styles.modelSelectorContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <Chip 
+                    selected={selectedModel === 'glm-4.6v-flash'} 
+                    onPress={() => setSelectedModel('glm-4.6v-flash')}
+                    style={styles.modelChip}
+                    icon="brain"
+                >深度分析</Chip>
+                <Chip 
+                    selected={selectedModel === 'fractal'} 
+                    onPress={() => setSelectedModel('fractal')}
+                    style={styles.modelChip}
+                    icon="chart-line-variant"
+                >分形预测</Chip>
+            </ScrollView>
+          </View>
         </View>
       </SafeAreaView>
 
@@ -317,48 +358,58 @@ const HomeScreen = () => {
 
               <View style={styles.actionRow}>
                 <Button
-                  mode={expandedStock === stock.code ? "contained-tonal" : "outlined"}
+                  mode="outlined"
                   onPress={() => handlePredict(stock.code)}
                   compact
                   icon="crystal-ball"
                   style={styles.predictBtn}
+                  loading={predicting[stock.code]}
                 >
                   AI 预测
                 </Button>
               </View>
-
-              {expandedStock === stock.code && (
-                <View style={styles.predictionContainer}>
-                  <Divider style={styles.divider} />
-                  {predicting[stock.code] ? (
-                    <ActivityIndicator animating={true} size="small" style={styles.loader} />
-                  ) : predictions[stock.code] ? (
-                    <View>
-                      <View style={styles.predictionHeader}>
-                        <Text variant="labelLarge">置信度: {(predictions[stock.code].confidence * 100).toFixed(0)}%</Text>
-                      </View>
-                      <Text variant="bodyMedium" style={styles.analysisText}>
-                        {predictions[stock.code].analysis}
-                      </Text>
-                      {predictions[stock.code].news_summary && (
-                        <View style={styles.newsBox}>
-                          <Text variant="bodySmall" style={styles.newsText}>
-                            📰 {predictions[stock.code].news_summary}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  ) : (
-                    <Text>暂无数据</Text>
-                  )}
-                </View>
-              )}
             </Card.Content>
           </Card>
         ))}
       </ScrollView>
 
       <Portal>
+        <Dialog visible={predictionDialogVisible} onDismiss={() => setPredictionDialogVisible(false)}>
+          <Dialog.Title>AI 预测结果</Dialog.Title>
+          <Dialog.Content>
+            {currentPrediction && (
+              <ScrollView style={{ maxHeight: 400 }}>
+                <Text variant="titleMedium" style={{ fontWeight: 'bold', marginBottom: 8 }}>
+                  {currentPrediction.code} (置信度: {(currentPrediction.confidence * 100).toFixed(0)}%)
+                </Text>
+                
+                {selectedModel === 'fractal' && currentFractalData && (
+                    <FractalChart data={currentFractalData} />
+                )}
+
+                <Text variant="bodyMedium" style={{ lineHeight: 20 }}>
+                  {currentPrediction.analysis}
+                </Text>
+                {currentPrediction.news_summary && (
+                  <View style={styles.newsBox}>
+                    <Text variant="bodySmall" style={styles.newsText}>
+                      📰 {currentPrediction.news_summary}
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setPredictionDialogVisible(false)}>关闭</Button>
+            <Button onPress={() => {
+                setPredictionDialogVisible(false);
+                // @ts-ignore
+                navigation.navigate('Prediction', { code: currentPrediction?.code });
+            }}>查看详情</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         <Dialog visible={visible} onDismiss={hideDialog}>
           <Dialog.Title>添加股票</Dialog.Title>
           <Dialog.Content>
@@ -491,6 +542,22 @@ const styles = StyleSheet.create({
   },
   newsText: {
     color: '#1565C0',
+  },
+  predictInputContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    backgroundColor: '#1E88E5',
+  },
+  predictInput: {
+    backgroundColor: '#FFFFFF',
+    height: 40,
+  },
+  modelSelectorContainer: {
+    marginTop: 8,
+    flexDirection: 'row',
+  },
+  modelChip: {
+    marginRight: 8,
   },
 });
 

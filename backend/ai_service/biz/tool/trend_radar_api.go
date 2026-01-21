@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -46,11 +47,15 @@ func GetToutiaoHotTrends() ([]string, error) {
 	}
 
 	var trends []string
-	for i, item := range res.Data {
-		if i >= 20 { // Top 20
-			break
+	count := 0
+	for _, item := range res.Data {
+		if isRelevant(item.Title) {
+			count++
+			trends = append(trends, fmt.Sprintf("%d. %s", count, item.Title))
+			if count >= 20 {
+				break
+			}
 		}
-		trends = append(trends, fmt.Sprintf("%d. %s", i+1, item.Title))
 	}
 	return trends, nil
 }
@@ -89,7 +94,7 @@ func GetBaiduHotTrends() ([]string, error) {
 	for _, match := range matches {
 		if len(match) > 1 {
 			title := strings.TrimSpace(match[1])
-			if title != "" {
+			if title != "" && isRelevant(title) {
 				count++
 				trends = append(trends, fmt.Sprintf("%d. %s", count, title))
 				if count >= 20 {
@@ -110,18 +115,22 @@ func GetBaiduHotTrends() ([]string, error) {
 
 type WallstreetCNHotResponse struct {
 	Data struct {
-		Items []struct {
+		DayItems []struct {
 			Title string `json:"title"`
 			Uri   string `json:"uri"`
-		} `json:"items"`
+		} `json:"day_items"`
+		WeekItems []struct {
+			Title string `json:"title"`
+			Uri   string `json:"uri"`
+		} `json:"week_items"`
 	} `json:"data"`
 }
 
 func GetWallstreetCNHotTrends(period string) ([]string, error) {
 	if period == "" {
-		period = "24h" // default
+		period = "day" // default
 	}
-	url := fmt.Sprintf("https://api-one-wscn.wallstreetcn.com/apiv1/content/articles/hot?period=%s", period)
+	url := fmt.Sprintf("https://api.wallstreetcn.com/apiv1/content/articles/hot?period=%s", period)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -147,7 +156,11 @@ func GetWallstreetCNHotTrends(period string) ([]string, error) {
 	}
 
 	var trends []string
-	for i, item := range res.Data.Items {
+	items := res.Data.DayItems
+	if len(items) == 0 {
+		items = res.Data.WeekItems
+	}
+	for i, item := range items {
 		if i >= 20 {
 			break
 		}
@@ -193,11 +206,15 @@ func GetThePaperHotTrends() ([]string, error) {
 	}
 
 	var trends []string
-	for i, item := range res.Data.HotNews {
-		if i >= 20 {
-			break
+	count := 0
+	for _, item := range res.Data.HotNews {
+		if isRelevant(item.Name) {
+			count++
+			trends = append(trends, fmt.Sprintf("%d. %s", count, item.Name))
+			if count >= 20 {
+				break
+			}
 		}
-		trends = append(trends, fmt.Sprintf("%d. %s", i+1, item.Name))
 	}
 	return trends, nil
 }
@@ -239,11 +256,15 @@ func GetZhihuHotTrends() ([]string, error) {
 	}
 
 	var trends []string
-	for i, item := range res.Data {
-		if i >= 20 {
-			break
+	count := 0
+	for _, item := range res.Data {
+		if isRelevant(item.Target.Title) {
+			count++
+			trends = append(trends, fmt.Sprintf("%d. %s", count, item.Target.Title))
+			if count >= 20 {
+				break
+			}
 		}
-		trends = append(trends, fmt.Sprintf("%d. %s", i+1, item.Target.Title))
 	}
 	return trends, nil
 }
@@ -253,16 +274,17 @@ func GetZhihuHotTrends() ([]string, error) {
 type CLSTelegraphResponse struct {
 	Data struct {
 		RollData []struct {
-			Title   string `json:"title"`
-			Content string `json:"content"`
-			Ctime   int64  `json:"ctime"`
+			Title      string `json:"title"`
+			Content    string `json:"content"`
+			Ctime      int64  `json:"ctime"`
+			ReadingNum int    `json:"reading_num"`
 		} `json:"roll_data"`
 	} `json:"data"`
 }
 
 func GetCailianPressTelegraph() ([]string, error) {
-	// Use nodeapi/telegraphList?rn=20
-	url := "https://www.cls.cn/nodeapi/telegraphList?rn=20"
+	// Use nodeapi/telegraphList?rn=100 to get a larger pool for sorting
+	url := "https://www.cls.cn/nodeapi/telegraphList?rn=100"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -287,8 +309,14 @@ func GetCailianPressTelegraph() ([]string, error) {
 		return nil, err
 	}
 
+	// Sort by ReadingNum desc
+	items := res.Data.RollData
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ReadingNum > items[j].ReadingNum
+	})
+
 	var trends []string
-	for i, item := range res.Data.RollData {
+	for i, item := range items {
 		if i >= 20 {
 			break
 		}
@@ -301,9 +329,50 @@ func GetCailianPressTelegraph() ([]string, error) {
 			}
 		}
 		t := time.Unix(item.Ctime, 0)
-		trends = append(trends, fmt.Sprintf("[%s] %s", t.Format("15:04"), title))
+		trends = append(trends, fmt.Sprintf("[%s] %s (Heat: %d)", t.Format("15:04"), title, item.ReadingNum))
 	}
 	return trends, nil
+}
+
+// --- Filter ---
+
+func isRelevant(title string) bool {
+	// Basic keywords for finance, economy, policy, tech industry
+	keywords := []string{
+		"经济", "金融", "股市", "股票", "A股", "美股", "港股", "证券", "基金",
+		"银行", "央行", "货币", "汇率", "外汇", "期货", "大宗", "黄金", "原油",
+		"能源", "芯片", "半导体", "AI", "人工智能", "科技", "互联网",
+		"房地产", "楼市", "车企", "新能源", "汽车", "消费", "贸易", "出口", "进口",
+		"GDP", "CPI", "PPI", "PMI",
+		"政策", "会议", "改革", "发展", "规划", "监管",
+		"IPO", "上市", "财报", "营收", "利润", "亏损",
+		"裁员", "招聘", "就业", "失业", "通胀", "紧缩", "利率", "降息", "加息",
+		"公司", "企业", "产业", "市场", "投资", "融资", "收购", "并购",
+		"美元", "人民币", "欧元", "日元",
+		"拜登", "特朗普", "普京", "欧盟", "北约", // Geopolitics
+		"战争", "冲突", "制裁",
+	}
+
+	// Blocklist to filter out noise
+	blocklist := []string{
+		"明星", "绯闻", "出轨", "离婚", "电视剧", "综艺", "网红", "穿搭", "减肥",
+		"星座", "八卦", "吃瓜", "搞笑", "段子", "宠物", "猫", "狗",
+		"杀人", "砍人", "跳楼", "强奸", "猥亵", "家暴", "吵架", "斗殴",
+	}
+
+	for _, block := range blocklist {
+		if strings.Contains(title, block) {
+			return false
+		}
+	}
+
+	for _, kw := range keywords {
+		if strings.Contains(title, kw) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // --- Aggregator ---
@@ -337,7 +406,7 @@ func GetAllTrends() (string, error) {
 
 	// WallstreetCN
 	sb.WriteString("=== WallstreetCN Hot Trends ===\n")
-	wscnTrends, err := GetWallstreetCNHotTrends("24h")
+	wscnTrends, err := GetWallstreetCNHotTrends("day")
 	if err != nil {
 		sb.WriteString(fmt.Sprintf("Error: %v\n", err))
 	} else {

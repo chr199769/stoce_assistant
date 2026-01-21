@@ -131,6 +131,19 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 	sectorContext, _ := sectorTool.Call(ctx, "industry")
 	dtContext, _ := dtTool.Call(ctx, "") // Get today's general list
 
+	// Pre-fetch Fractal Analysis (for reference)
+	var fractalAnalysisContext string
+	fractalRes, _, _, err := p.predictWithFractal(ctx, stockCode, days)
+	if err == nil {
+		// Clean up metadata from fractal response to keep prompt clean
+		parts := strings.Split(fractalRes, "---METADATA---")
+		if len(parts) > 0 {
+			fractalAnalysisContext = strings.TrimSpace(parts[0])
+		}
+	} else {
+		fractalAnalysisContext = "Fractal analysis unavailable."
+	}
+
 	// 4. Create Agent
 	// ZeroShotReactDescription is good for general purpose tool use
 	agent := agents.NewOneShotAgent(llm, t, agents.WithMaxIterations(5))
@@ -179,6 +192,9 @@ Here is the real-time data for the stock:
 %s
 
 [Today's Hot Money (Dragon Tiger List)]:
+%s
+
+[Technical Analysis - Fractal Pattern (Historical Similarity)]:
 %s
 
 Process (Professional Trader Logic):
@@ -241,7 +257,7 @@ Final Answer:
 {"confidence": 0.85, "news_summary": "Policy support for low-altitude economy and 5G drives positive outlook despite short-term selling pressure."}
 
 Output your final answer starting with "Final Answer:", followed by the detailed analysis in Chinese, and then the metadata block.
-`, stockCode, time.Now().Format("2006-01-02 15:04:05"), tradingStatusStr, stockData, analysisData, marketInfo, sectorContext, dtContext, timeContextInstruction, predictionFocus, tradingStatusStr, predictionFocus)
+`, stockCode, time.Now().Format("2006-01-02 15:04:05"), tradingStatusStr, stockData, analysisData, marketInfo, sectorContext, dtContext, fractalAnalysisContext, timeContextInstruction, predictionFocus, tradingStatusStr, predictionFocus)
 
 	res, err := chains.Run(ctx, executor, input)
 	if err != nil {
@@ -865,31 +881,41 @@ func (p *LangChainProvider) predictWithFractal(ctx context.Context, stockCode st
 	startPriceMatch := searchSpace[bestMatchIdx+queryLen-1]
 
 	var analysisBuilder strings.Builder
-	analysisBuilder.WriteString(fmt.Sprintf("Fractal Pattern Match Found (Similarity: %.2f%%)\n", bestSim*100))
-	analysisBuilder.WriteString(fmt.Sprintf("Matched Historical Period: %s\n", klines[bestMatchIdx].Date)) // Approximate date
-	analysisBuilder.WriteString("Projected Path:\n")
+	analysisBuilder.WriteString(fmt.Sprintf("发现分形模式匹配 (相似度: %.2f%%)\n", bestSim*100))
+	analysisBuilder.WriteString(fmt.Sprintf("匹配历史时段: %s\n", klines[bestMatchIdx].Date)) // Approximate date
+	analysisBuilder.WriteString("走势推演:\n")
 
 	for i, price := range bestMatch {
 		changeRatio := price / startPriceMatch
 		projectedPrice := currentPrice * changeRatio
 		projection[i] = projectedPrice
-		analysisBuilder.WriteString(fmt.Sprintf("Day +%d: %.2f\n", i+1, projectedPrice))
+		analysisBuilder.WriteString(fmt.Sprintf("未来第 %d 天: %.2f\n", i+1, projectedPrice))
 	}
 
-	trend := "Neutral"
+	trend := "中性"
 	if len(projection) > 0 {
 		if projection[len(projection)-1] > currentPrice*1.02 {
-			trend = "Bullish"
+			trend = "看涨"
 		} else if projection[len(projection)-1] < currentPrice*0.98 {
-			trend = "Bearish"
+			trend = "看跌"
 		}
 	}
 
-	finalAnalysis := fmt.Sprintf("Based on fractal geometry, the current 20-day price pattern is %.0f%% similar to the pattern starting on %s.\n\nTrend: %s\n\n%s", bestSim*100, klines[bestMatchIdx].Date, trend, analysisBuilder.String())
+	finalAnalysis := fmt.Sprintf("基于分形几何学分析，当前20日K线形态与 %s 开始的历史走势有 %.0f%% 的相似度。\n\n趋势预测: %s\n\n%s", klines[bestMatchIdx].Date, bestSim*100, trend, analysisBuilder.String())
+
+	// Prepare fractal data for chart
+	fractalData := map[string]interface{}{
+		"query":      queryPattern,
+		"match":      bestMatch,
+		"projection": projection,
+		"match_date": klines[bestMatchIdx].Date,
+		"dates":      make([]string, len(queryPattern)+len(projection)), // Placeholder for dates if needed
+	}
+	fractalDataJSON, _ := json.Marshal(fractalData)
 
 	// Format metadata
 	metadata := fmt.Sprintf(`---METADATA---
-{"confidence": %.2f, "news_summary": "Fractal analysis based on historical self-similarity."}`, bestSim)
+{"confidence": %.2f, "news_summary": "基于历史分形自相似性的技术分析。", "fractal_data": %s}`, bestSim, string(fractalDataJSON))
 
-	return finalAnalysis + "\n\n" + metadata, bestSim, "Fractal Pattern Match", nil
+	return finalAnalysis + "\n\n" + metadata, bestSim, "分形模式匹配", nil
 }

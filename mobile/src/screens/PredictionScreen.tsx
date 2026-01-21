@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { Appbar, TextInput, Button, Card, Text, ProgressBar, HelperText, Chip } from 'react-native-paper';
+import { Appbar, TextInput, Button, Card, Text, ProgressBar, HelperText, SegmentedButtons } from 'react-native-paper';
 import { getPrediction } from '../api/stock';
 import { PredictionResponse } from '../types';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import FractalChart, { FractalData } from '../components/FractalChart';
 
 const PredictionScreen = () => {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState('');
+  const [model, setModel] = useState('glm-4.6v-flash');
+  const [fractalData, setFractalData] = useState<FractalData | null>(null);
 
   const route = useRoute();
   const navigation = useNavigation();
@@ -18,25 +21,57 @@ const PredictionScreen = () => {
     // @ts-ignore
     if (route.params?.code) {
       // @ts-ignore
-      setCode(route.params.code);
+      const newCode = route.params.code;
       // @ts-ignore
-      handlePredict(route.params.code);
+      const initialModel = route.params.model || 'glm-4.6v-flash';
+
+      setCode(newCode);
+      setModel(initialModel);
+
+      // Auto trigger prediction
+      handlePredict(newCode, initialModel);
     }
   }, [route.params]);
 
-  const handlePredict = async (searchCode: string = code) => {
+  const parseMetadata = (analysis: string) => {
+    const parts = analysis.split('---METADATA---');
+    if (parts.length > 1) {
+      try {
+        const metadataJson = parts[1].trim();
+        const metadata = JSON.parse(metadataJson);
+        if (metadata.fractal_data) {
+          setFractalData(metadata.fractal_data);
+        } else {
+          setFractalData(null);
+        }
+        return parts[0].trim(); // Return cleaned analysis text
+      } catch (e) {
+        console.error("Failed to parse metadata", e);
+      }
+    }
+    setFractalData(null);
+    return analysis;
+  };
+
+  const handlePredict = async (searchCode: string = code, currentModel: string = model) => {
     if (!searchCode) return;
     setLoading(true);
     setError('');
     setResult(null);
+    setFractalData(null);
+
     try {
       const data = await getPrediction({
         code: searchCode,
         days: 3,
         include_news: true,
-        model: 'glm-4.6v-flash', // Default model
+        model: currentModel,
       });
-      setResult(data);
+
+      // Parse metadata to separate text and chart data
+      const cleanAnalysis = parseMetadata(data.analysis);
+      setResult({ ...data, analysis: cleanAnalysis });
+
     } catch (err) {
       setError('获取预测失败，请检查股票代码或网络连接');
       console.error(err);
@@ -62,6 +97,26 @@ const PredictionScreen = () => {
             style={styles.input}
             right={<TextInput.Icon icon="magnify" onPress={() => handlePredict(code)} />}
           />
+
+          <Text style={styles.sectionTitle}>选择预测模型</Text>
+          <SegmentedButtons
+            value={model}
+            onValueChange={setModel}
+            buttons={[
+              {
+                value: 'glm-4.6v-flash',
+                label: '深度分析',
+                icon: 'brain',
+              },
+              {
+                value: 'fractal',
+                label: '分形预测',
+                icon: 'chart-line-variant',
+              },
+            ]}
+            style={styles.modelSelector}
+          />
+
           <Button mode="contained" onPress={() => handlePredict(code)} loading={loading} style={styles.button}>
             开始预测
           </Button>
@@ -74,20 +129,28 @@ const PredictionScreen = () => {
         {result && (
           <View>
             <Card style={styles.card}>
-              <Card.Title title="预测结果分析" />
+              <Card.Title title={model === 'fractal' ? "分形几何预测" : "AI 深度分析"} />
               <Card.Content>
                 <Text variant="titleLarge" style={styles.stockTitle}>{result.code}</Text>
-                
+
                 <View style={styles.confidenceContainer}>
                   <Text variant="bodyMedium">置信度: {(result.confidence * 100).toFixed(1)}%</Text>
                   <ProgressBar progress={result.confidence} color="#1E88E5" style={styles.progressBar} />
                 </View>
 
+                {model === 'fractal' && fractalData && (
+                  <FractalChart data={fractalData} />
+                )}
+
                 <Text variant="titleMedium" style={styles.sectionTitle}>走势分析</Text>
                 <Text variant="bodyMedium" style={styles.analysisText}>{result.analysis}</Text>
 
-                <Text variant="titleMedium" style={styles.sectionTitle}>新闻摘要</Text>
-                <Text variant="bodySmall" style={styles.newsText}>{result.news_summary}</Text>
+                {result.news_summary ? (
+                  <>
+                    <Text variant="titleMedium" style={styles.sectionTitle}>关键摘要</Text>
+                    <Text variant="bodySmall" style={styles.newsText}>{result.news_summary}</Text>
+                  </>
+                ) : null}
               </Card.Content>
             </Card>
           </View>
@@ -117,6 +180,9 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: '#FFFFFF',
+    marginBottom: 12,
+  },
+  modelSelector: {
     marginBottom: 12,
   },
   button: {

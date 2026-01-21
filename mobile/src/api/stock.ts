@@ -9,6 +9,7 @@ import {
   MarketAnalysisRequest,
   MarketAnalysisResponse,
   GetSectorStocksResponse,
+  GetMarketSectorsResponse,
   GetDragonTigerListResponse,
   AddWatchlistResponse,
   RemoveWatchlistResponse,
@@ -63,6 +64,11 @@ export const analyzeMarket = async (req: MarketAnalysisRequest): Promise<MarketA
 
 export const getSectorStocks = async (sectorCode: string): Promise<GetSectorStocksResponse> => {
   const response = await client.get<GetSectorStocksResponse>(`/api/stock/sector/stocks?sector_code=${sectorCode}`);
+  return response.data;
+};
+
+export const getMarketSectors = async (limit: number = 20, type: string = 'concept'): Promise<GetMarketSectorsResponse> => {
+  const response = await client.get<GetMarketSectorsResponse>(`/api/market/sectors?limit=${limit}&type=${type}`);
   return response.data;
 };
 

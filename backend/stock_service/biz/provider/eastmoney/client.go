@@ -23,6 +23,32 @@ func NewClient() *Client {
 	}
 }
 
+func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://quote.eastmoney.com/")
+	req.Header.Set("Origin", "https://quote.eastmoney.com")
+	req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		// Try to read body for error details
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("eastmoney api error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return resp, nil
+}
+
 type FinancialReportResponse struct {
 	Success bool `json:"success"`
 	Result  struct {
@@ -51,7 +77,7 @@ func (c *Client) GetFinancialReports(ctx context.Context, code string) ([]*stock
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -99,17 +125,17 @@ func (c *Client) GetFinancialReports(ctx context.Context, code string) ([]*stock
 // --- Sector Data Support ---
 
 type SectorRankResponse struct {
-	Rc   int `json:"rc"`
+	Rc   int    `json:"rc"`
 	Data *struct {
 		Total int `json:"total"`
 		Diff  []struct {
-			Code           string  `json:"f12"`
-			Name           string  `json:"f14"`
-			ChangePercent  float64 `json:"f3"`
-			NetInflow      float64 `json:"f62"`
-			TopStockName   string  `json:"f128"`
-			TopStockCode   string  `json:"f140"`
-			TopStockChange float64 `json:"f136"`
+			Code             string  `json:"f12"`
+			Name             string  `json:"f14"`
+			ChangePercent    float64 `json:"f3"`
+			NetInflow        float64 `json:"f62"`
+			TopStockName     string  `json:"f128"`
+			TopStockCode     string  `json:"f140"`
+			TopStockChange   float64 `json:"f136"`
 		} `json:"diff"`
 	} `json:"data"`
 }
@@ -124,20 +150,20 @@ func (c *Client) GetSectorRank(ctx context.Context, rankType string, limit int) 
 	// Determine 'fs' parameter based on type
 	var fs string
 	if rankType == "industry" {
-		fs = "m:90+t:2+f:!50"
+		fs = "m:90%2Bt:2%2Bf:!50"
 	} else {
 		// Default to concept
-		fs = "m:90+t:3+f:!50"
+		fs = "m:90%2Bt:3%2Bf:!50"
 	}
 
-	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=%d&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f13,f14,f2,f3,f62,f128,f140,f136", limit, fs)
+	url := fmt.Sprintf("http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f13,f14,f2,f3,f62,f128,f140,f136", limit, fs)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -212,14 +238,14 @@ type SectorStockItem struct {
 func (c *Client) GetSectorStocksRaw(ctx context.Context, sectorCode string) ([]*SectorStockItem, error) {
 	fs := fmt.Sprintf("b:%s", sectorCode)
 	// Get top 100 stocks by change percent desc
-	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f5,f6,f20", fs)
+	url := fmt.Sprintf("http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f5,f6,f20", fs)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +337,7 @@ func (c *Client) GetDragonTigerList(ctx context.Context, date string) ([]*Dragon
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +397,7 @@ func (c *Client) fetchSeats(ctx context.Context, url string) ([]*DragonTigerSeat
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, err
 	}

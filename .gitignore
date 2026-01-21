@@ -33,3 +33,4 @@ backend/ai_service/conf/llm_config.json
 
 # Generated Code
 **/kitex_gen/
+backend/stock_service/conf/prod.json

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { Appbar, Card, Text, Divider, Chip, Button, ActivityIndicator } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
-import { getRealtime, marketReview } from '../api/stock';
-import { RealtimeResponse, MarketReviewResponse } from '../types';
+import { getRealtime, marketReview, getMarketSectors } from '../api/stock';
+import { RealtimeResponse, MarketReviewResponse, SectorInfo } from '../types';
 import { PieChart } from 'react-native-chart-kit';
 
 const SummaryScreen = () => {
@@ -12,15 +12,16 @@ const SummaryScreen = () => {
   const [loading, setLoading] = useState(false);
   const [review, setReview] = useState<MarketReviewResponse | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [sectors, setSectors] = useState<SectorInfo[]>([]);
 
-  // Mock sector data
-  const sectorData = [
-    { name: '科技', population: 35, color: '#F44336', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: '金融', population: 25, color: '#1E88E5', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: '消费', population: 20, color: '#FF9800', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: '医疗', population: 15, color: '#4CAF50', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-    { name: '其他', population: 5, color: '#9E9E9E', legendFontColor: '#7F7F7F', legendFontSize: 12 },
-  ];
+  // Calculate chart data from sectors
+  const chartData = sectors.slice(0, 5).map((s, i) => ({
+    name: s.name,
+    population: Math.max(0.1, Math.abs(s.change_percent)), // Use absolute or ensure positive for visibility
+    color: ['#F44336', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5'][i % 5],
+    legendFontColor: '#7F7F7F',
+    legendFontSize: 12
+  }));
 
   const fetchIndices = async () => {
     setLoading(true);
@@ -52,27 +53,30 @@ const SummaryScreen = () => {
     }
   };
 
-  const handleSectorPress = (sectorName: string) => {
-    // Map common names to codes (Simplified mapping for demo)
-    // In a real app, you'd get code from the API response
-    const codeMap: Record<string, string> = {
-      '半导体': 'BK1036',
-      '新能源车': 'BK0900',
-      '人工智能': 'BK0985',
-      '科技': 'BK0696',
-      '金融': 'BK0475'
-    };
+  const fetchSectors = async () => {
+    try {
+      const res = await getMarketSectors(10, 'concept');
+      setSectors(res.sectors);
+    } catch (error) {
+      console.error("Failed to fetch sectors:", error);
+    }
+  };
 
-    // Default to a tech sector if not found
-    const code = codeMap[sectorName] || 'BK0800';
-
+  const handleSectorPress = (sectorName: string, sectorCode?: string) => {
+    if (sectorCode) {
+      // @ts-ignore
+      navigation.navigate('SectorDetail', { sectorCode, sectorName });
+      return;
+    }
+    // Fallback or ignore
     // @ts-ignore
-    navigation.navigate('SectorDetail', { sectorCode: code, sectorName });
+    navigation.navigate('SectorDetail', { sectorCode: 'BK0800', sectorName });
   };
 
   useEffect(() => {
     fetchIndices();
     fetchReview();
+    fetchSectors();
   }, []);
 
   const getColor = (change: number) => {
@@ -130,32 +134,44 @@ const SummaryScreen = () => {
 
         <Divider style={styles.divider} />
 
-        <Text variant="titleMedium" style={styles.sectionTitle}>板块涨跌分布</Text>
+        <Text variant="titleMedium" style={styles.sectionTitle}>热门板块涨幅分布</Text>
         <Card style={styles.chartCard}>
           <Card.Content>
-            <PieChart
-              data={sectorData}
-              width={Dimensions.get('window').width - 64}
-              height={220}
-              chartConfig={{
-                backgroundColor: '#ffffff',
-                backgroundGradientFrom: '#ffffff',
-                backgroundGradientTo: '#ffffff',
-                color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-              }}
-              accessor="population"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              absolute
-            />
+            {sectors.length > 0 ? (
+              <PieChart
+                data={chartData}
+                width={Dimensions.get('window').width - 64}
+                height={220}
+                chartConfig={{
+                  backgroundColor: '#ffffff',
+                  backgroundGradientFrom: '#ffffff',
+                  backgroundGradientTo: '#ffffff',
+                  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                }}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                absolute
+              />
+            ) : (
+              <ActivityIndicator animating={true} color="#1E88E5" style={{ margin: 20 }} />
+            )}
           </Card.Content>
         </Card>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>今日热点 (点击查看详情)</Text>
         <View style={styles.chipContainer}>
-          <Chip icon="fire" style={styles.chip} textStyle={{ color: '#fff' }} onPress={() => handleSectorPress('半导体')}>半导体</Chip>
-          <Chip icon="fire" style={styles.chip} textStyle={{ color: '#fff' }} onPress={() => handleSectorPress('新能源车')}>新能源车</Chip>
-          <Chip icon="trending-up" style={styles.chip} textStyle={{ color: '#fff' }} onPress={() => handleSectorPress('人工智能')}>人工智能</Chip>
+          {sectors.slice(0, 5).map((s) => (
+             <Chip 
+               key={s.code} 
+               icon="fire" 
+               style={styles.chip} 
+               textStyle={{ color: '#fff' }} 
+               onPress={() => handleSectorPress(s.name, s.code)}
+             >
+               {s.name} {s.change_percent > 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
+             </Chip>
+          ))}
         </View>
 
       </ScrollView>

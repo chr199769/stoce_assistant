@@ -1,22 +1,52 @@
 version: '3.8'
 
 services:
-  # --- Knowledge Graph ---
-  neo4j:
-    image: neo4j:5.15.0-community
-    container_name: stock_neo4j
-    ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
+  # --- Database ---
+  mysql:
+    image: mysql:8.0
+    container_name: stock_mysql
+    restart: always
     environment:
-      NEO4J_AUTH: neo4j/password # Change in production
-      NEO4J_PLUGINS: '["apoc"]'
+      MYSQL_ROOT_PASSWORD: "12345678"
+      MYSQL_DATABASE: "stock_assistant"
+    ports:
+      - "3306:3306"
     volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
+      - mysql_data:/var/lib/mysql
+
+  # --- Backend Services ---
+  stock-service:
+    build:
+      context: ../backend/stock_service
+    container_name: stock_service
+    restart: always
+    depends_on:
+      - mysql
+    ports:
+      - "8888:8888"
+    environment:
+      MYSQL_DSN: "root:12345678@tcp(mysql:3306)/stock_assistant?charset=utf8mb4&parseTime=True&loc=Local"
+
+  ai-service:
+    build:
+      context: ../backend/ai_service
+    container_name: ai_service
+    restart: always
+    depends_on:
+      - stock-service
+      - langfuse-server
+    ports:
+      - "8889:8889"
+    environment:
+      STOCK_SERVICE_ADDR: "stock-service:8888"
+      LANGFUSE_HOST: "http://langfuse-server:3000"
+      # Use keys from config or env if needed. Assuming config file inside container handles it if env vars are missing,
+      # but we can override here.
+      LANGFUSE_PUBLIC_KEY: "pk-lf-e120eb7e-2392-4225-9a46-6d4c14999e6d"
+      LANGFUSE_SECRET_KEY: "sk-lf-f8e9f0e7-1ea5-4c4a-afa3-a1344d5aaa5a"
 
   # --- Prediction Tracking & Eval ---
-  # Langfuse requires Postgres
+  # Langfuse requires Postgres, ClickHouse, Redis
   langfuse-db:
     image: postgres:16
     container_name: stock_langfuse_db
@@ -28,11 +58,50 @@ services:
     volumes:
       - langfuse_db_data:/var/lib/postgresql/data
 
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    container_name: stock_langfuse_clickhouse
+    restart: always
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      # Disable Keeper/Zookeeper dependency for single node
+      CLICKHOUSE_SETTINGS: "allow_experimental_lightweight_delete=1"
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+
+  redis:
+    image: redis:7
+    container_name: stock_langfuse_redis
+    restart: always
+    command: redis-server --requirepass myredissecret
+    volumes:
+      - langfuse_redis_data:/data
+
+  minio:
+    image: minio/minio
+    container_name: stock_langfuse_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    volumes:
+      - langfuse_minio_data:/data
+
   langfuse-server:
-    image: langfuse/langfuse:2
-    container_name: stock_langfuse
+    image: langfuse/langfuse:3
+    container_name: stock_langfuse_web
+    restart: always
     depends_on:
       - langfuse-db
+      - clickhouse
+      - redis
+      - minio
     ports:
       - "3000:3000"
     environment:
@@ -41,8 +110,60 @@ services:
       NEXTAUTH_SECRET: "mysecret" # Change in production
       SALT: "mysalt" # Change in production
       TELEMETRY_ENABLED: "false"
+      # ClickHouse
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_MIGRATION_URL: "clickhouse://clickhouse:9000"
+      CLICKHOUSE_USER: "default"
+      CLICKHOUSE_PASSWORD: "password"
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      # Redis
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_AUTH: "myredissecret"
+      # Security
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000" # 64 hex chars
+      # S3 / MinIO
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: "langfuse"
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: "auto"
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: "minio"
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: "miniosecret"
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: "http://minio:9000"
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: stock_langfuse_worker
+    restart: always
+    depends_on:
+      - langfuse-db
+      - clickhouse
+      - redis
+      - minio
+    environment:
+      DATABASE_URL: "postgresql://langfuse:langfuse_password@langfuse-db:5432/langfuse"
+      # ClickHouse
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_USER: "default"
+      CLICKHOUSE_PASSWORD: "password"
+      # Redis
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_AUTH: "myredissecret"
+      # Security
+      SALT: "mysalt"
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      # S3 / MinIO
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: "langfuse"
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: "auto"
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: "minio"
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: "miniosecret"
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: "http://minio:9000"
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
 
 volumes:
-  neo4j_data:
-  neo4j_logs:
   langfuse_db_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_redis_data:
+  langfuse_minio_data:
+  mysql_data:
