@@ -46,14 +46,13 @@ type LimitUpPoolResponse struct {
 	} `json:"data"`
 }
 
-// GetLimitUpPool fetches the daily limit-up pool.
-// Note: This uses a reverse-engineered API which might be unstable.
+// GetLimitUpPool 获取每日涨停池数据
+// 注意：使用非官方 API，可能不稳定
 func (c *Client) GetLimitUpPool(ctx context.Context) ([]*LimitUpStock, error) {
-	// Using a placeholder URL that was found in search results, but might need date param.
-	// Current strategy: Try to fetch, if fail, return empty list (non-blocking).
-	// Real URL often looks like: https://push2ex.eastmoney.com/getTopicZTPool
+	// 占位符 URL，实际需确认
+	// 真实 URL 示例: https://push2ex.eastmoney.com/getTopicZTPool
 	
-	// Construct today's date in YYYYMMDD format
+	// 构建 YYYYMMDD 日期
 	dateStr := time.Now().Format("20060102")
 	url := fmt.Sprintf("https://push2ex.eastmoney.com/getTopicZTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztgc&Pageindex=0&pagesize=100&sort=fbt:asc&date=%s", dateStr)
 
@@ -73,20 +72,18 @@ func (c *Client) GetLimitUpPool(ctx context.Context) ([]*LimitUpStock, error) {
 		return nil, err
 	}
 
-	// For now, since we haven't confirmed the exact JSON structure of the ZTPool API,
-	// we will log the body (in a real app) and return a mock/empty list if parsing fails.
-	// This allows the compilation to succeed and we can refine the parsing logic later 
-	// when we have a valid response sample.
+	// 暂未确认 ZTPool API 准确 JSON 结构
+	// 记录日志并在解析失败时返回空列表
 	
 	var result LimitUpPoolResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		// Fallback: return error or empty
-		return nil, fmt.Errorf("failed to parse sentiment data: %v", err)
+		// 解析失败，返回错误
+		return nil, fmt.Errorf("解析情绪数据失败: %v", err)
 	}
 	
 	if result.Data == nil || result.Rc != 0 {
-		// Log the error but return empty list instead of misleading mock data
-		fmt.Printf("Warning: Sentiment API failed (rc=%d), returning empty list.\n", result.Rc)
+		// API 失败，返回空列表
+		fmt.Printf("警告: 情绪 API 失败 (rc=%d), 返回空列表。\n", result.Rc)
 		return []*LimitUpStock{}, nil
 	}
 

@@ -14543,3 +14543,11 @@ func (p *StockAPIGetHistoricalKlineResult) String() string {
 	return fmt.Sprintf("StockAPIGetHistoricalKlineResult(%+v)", *p)
 
 }
+
+type DeleteEvaluationRequest struct {
+Id string `path:"id" json:"id"`
+}
+
+type DeleteEvaluationResponse struct {
+Success bool `json:"success"`
+}

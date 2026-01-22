@@ -11,21 +11,21 @@ const client = axios.create({
   },
 });
 
-// Add request interceptor for debugging
+// 添加请求拦截器以便调试
 client.interceptors.request.use(request => {
-  console.log('Starting Request:', request.method?.toUpperCase(), request.url);
-  console.log('Request Data:', request.data);
+  console.log('开始请求:', request.method?.toUpperCase(), request.url);
+  console.log('请求数据:', request.data);
   return request;
 });
 
 client.interceptors.response.use(response => {
-  console.log('Response:', response.status, response.config.url);
+  console.log('响应:', response.status, response.config.url);
   return response;
 }, error => {
-  console.log('Response Error:', error.message);
+  console.log('响应错误:', error.message);
   if (error.response) {
-      console.log('Error Data:', error.response.data);
-      console.log('Error Status:', error.response.status);
+    console.log('错误数据:', error.response.data);
+    console.log('错误状态:', error.response.status);
   }
   return Promise.reject(error);
 });

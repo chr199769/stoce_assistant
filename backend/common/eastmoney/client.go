@@ -40,7 +40,7 @@ func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("eastmoney api error: status=%d body=%s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("eastmoney api 错误: 状态码=%d 内容=%s", resp.StatusCode, string(body))
 	}
 
 	return resp, nil
@@ -93,7 +93,7 @@ func (c *Client) GetFinancialReports(ctx context.Context, code string) ([]*Finan
 		if len(result.Result.Data) == 0 {
 			return []*FinancialData{}, nil
 		}
-		return nil, fmt.Errorf("eastmoney api failed")
+		return nil, fmt.Errorf("eastmoney api 失败")
 	}
 
 	var reports []*FinancialData
@@ -168,7 +168,7 @@ func (c *Client) GetSectorRank(ctx context.Context, rankType string, limit int) 
 	}
 
 	if result.Data == nil {
-		return nil, fmt.Errorf("no data returned from eastmoney")
+		return nil, fmt.Errorf("eastmoney 未返回数据")
 	}
 
 	var sectors []*SectorInfo
@@ -228,7 +228,7 @@ func (c *Client) GetSectorStocksRaw(ctx context.Context, sectorCode string) ([]*
 	}
 
 	if result.Data == nil {
-		return nil, fmt.Errorf("no data returned from eastmoney")
+		return nil, fmt.Errorf("eastmoney 未返回数据")
 	}
 
 	var stocks []*SectorStockItem

@@ -24,7 +24,7 @@ func (t *StockPriceTool) Name() string {
 }
 
 func (t *StockPriceTool) Description() string {
-	return "Useful for getting the realtime stock price and information. Input should be the stock code (e.g., sh600519)."
+	return "用于获取实时股票价格和信息。输入应为股票代码（例如：sh600519）。"
 }
 
 func (t *StockPriceTool) Call(ctx context.Context, input string) (string, error) {
@@ -49,21 +49,21 @@ func (t *StockPriceTool) Call(ctx context.Context, input string) (string, error)
 		return r
 	}, input)
 
-	log.Printf("StockPriceTool called with cleaned input: [%s]\n", input)
+	log.Printf("StockPriceTool 被调用，输入: [%s]\n", input)
 	req := &stock.GetRealtimeRequest{Code: input}
 	resp, err := t.Client.GetRealtime(ctx, req)
 	if err != nil {
-		log.Printf("StockPriceTool GetRealtime error: %v\n", err)
+		log.Printf("StockPriceTool 获取实时数据错误: %v\n", err)
 		// Return error as string observation so the Agent knows it failed
-		return fmt.Sprintf("Error fetching stock data: %v", err), nil
+		return fmt.Sprintf("获取股票数据失败: %v", err), nil
 	}
 	if resp.Stock == nil {
-		log.Printf("StockPriceTool: Stock not found for input: %s\n", input)
-		return "Stock not found", nil
+		log.Printf("StockPriceTool: 未找到股票: %s\n", input)
+		return "未找到股票", nil
 	}
-	result := fmt.Sprintf("Stock: %s (%s), Price: %.2f, Change: %.2f%%, Volume: %d",
+	result := fmt.Sprintf("股票: %s (%s), 价格: %.2f, 涨跌幅: %.2f%%, 成交量: %d",
 		resp.Stock.Name, resp.Stock.Code, resp.Stock.CurrentPrice, resp.Stock.ChangePercent, resp.Stock.Volume)
-	log.Printf("StockPriceTool success: %s\n", result)
+	log.Printf("StockPriceTool 成功: %s\n", result)
 	return result, nil
 }
 
@@ -82,7 +82,7 @@ func (t *StockAnalysisTool) Name() string {
 }
 
 func (t *StockAnalysisTool) Description() string {
-	return "Useful for getting advanced stock analysis data including Dragon Tiger List history, Chip Distribution, Order Book, Industry info, Guba Popularity, and Regulatory Notices. Input should be the stock code (e.g., 600519)."
+	return "用于获取高级股票分析数据，包括龙虎榜历史、筹码分布、盘口、行业信息、股吧热度和监管公告。输入应为股票代码（例如：600519）。"
 }
 
 func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, error) {
@@ -107,34 +107,34 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 		return r
 	}, input)
 
-	log.Printf("StockAnalysisTool called with input: [%s]\n", input)
+	log.Printf("StockAnalysisTool 被调用，输入: [%s]\n", input)
 
 	// Fetch data
 	// 1. Industry
 	industryData, err := t.EastMoneyClient.GetIndustryIndex(ctx, input)
-	industry := "Error fetching industry info"
+	industry := "获取行业信息失败"
 	if err != nil {
-		log.Printf("Error fetching industry: %v", err)
+		log.Printf("获取行业失败: %v", err)
 	} else {
 		industry = industryData.String()
 	}
 
 	// 2. Order Book
 	ordersData, err := t.EastMoneyClient.GetOrderBook(ctx, input)
-	orders := "Error fetching order book"
+	orders := "获取盘口失败"
 	if err != nil {
-		log.Printf("Error fetching order book: %v", err)
+		log.Printf("获取盘口失败: %v", err)
 	} else {
 		orders = ordersData.String()
 	}
 
 	// 3. Chip Distribution
 	chipData, err := t.EastMoneyClient.GetChipDistribution(ctx, input)
-	chip := "Error fetching chip distribution"
+	chip := "获取筹码分布失败"
 	if err != nil {
-		log.Printf("Error fetching chip distribution: %v", err)
+		log.Printf("获取筹码分布失败: %v", err)
 	} else if chipData == nil {
-		chip = "No chip distribution data available"
+		chip = "无筹码分布数据"
 	} else {
 		chip = chipData.String()
 	}
@@ -143,7 +143,7 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 	lhbData, err := t.EastMoneyClient.GetDragonTigerHistory(ctx, input, 5)
 	var lhb []string
 	if err != nil {
-		log.Printf("Error fetching LHB history: %v", err)
+		log.Printf("获取龙虎榜历史失败: %v", err)
 	} else {
 		for _, item := range lhbData {
 			lhb = append(lhb, item.String())
@@ -152,11 +152,11 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 
 	// 6. Stock Heat (Sentiment)
 	heatData, err := t.EastMoneyClient.GetStockHeat(ctx, input)
-	heat := "Error fetching stock heat"
+	heat := "获取股票热度失败"
 	if err != nil {
-		log.Printf("Error fetching stock heat: %v", err)
+		log.Printf("获取股票热度失败: %v", err)
 	} else if heatData == nil {
-		heat = "Guba Rank: >100 (Not in Top 100)"
+		heat = "股吧排名: >100 (未进入前100)"
 	} else {
 		heat = heatData.String()
 	}
@@ -165,7 +165,7 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 	noticesData, err := t.EastMoneyClient.GetStockNotices(ctx, input, []string{"监管", "问询", "关注函", "立案", "警示"})
 	var notices []string
 	if err != nil {
-		log.Printf("Error fetching notices: %v", err)
+		log.Printf("获取公告失败: %v", err)
 	} else {
 		for _, item := range noticesData {
 			notices = append(notices, item.String())
@@ -177,39 +177,39 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 
 	// Format output
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Analysis for %s:\n", input))
+	sb.WriteString(fmt.Sprintf("%s 的分析报告:\n", input))
 
-	sb.WriteString("\n[Quantitative Risk Check]\n")
+	sb.WriteString("\n[量化风控检查]\n")
 	sb.WriteString(riskCheck)
 
-	sb.WriteString("\n\n[Industry Info]\n")
+	sb.WriteString("\n\n[行业信息]\n")
 	sb.WriteString(industry)
 
-	sb.WriteString("\n\n[Order Book (Intraday)]\n")
+	sb.WriteString("\n\n[实时盘口]\n")
 	sb.WriteString(orders)
 
-	sb.WriteString("\n\n[Chip Distribution (Cost Structure)]\n")
+	sb.WriteString("\n\n[筹码分布 (成本结构)]\n")
 	sb.WriteString(chip)
 
-	sb.WriteString("\n\n[Market Sentiment & Funds]\n")
+	sb.WriteString("\n\n[市场情绪 & 资金]\n")
 	sb.WriteString(heat)
 
-	sb.WriteString("\n\n[Dragon Tiger List (Last 5)]\n")
+	sb.WriteString("\n\n[龙虎榜 (最近 5 次)]\n")
 	if len(lhb) > 0 {
 		for _, l := range lhb {
 			sb.WriteString(l + "\n")
 		}
 	} else {
-		sb.WriteString("No recent records.\n")
+		sb.WriteString("近期无记录。\n")
 	}
 
-	sb.WriteString("\n\n[Regulatory Notices (Risk Alert)]\n")
+	sb.WriteString("\n\n[监管公告 (风险提示)]\n")
 	if len(notices) > 0 {
 		for _, n := range notices {
 			sb.WriteString(n + "\n")
 		}
 	} else {
-		sb.WriteString("No recent regulatory notices.\n")
+		sb.WriteString("近期无监管公告。\n")
 	}
 
 	return sb.String(), nil

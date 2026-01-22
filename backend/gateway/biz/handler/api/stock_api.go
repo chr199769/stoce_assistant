@@ -16,7 +16,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
-// GetRealtime .
+// GetRealtime 获取实时股价
 // @router /api/stocks/:code/realtime [GET]
 func GetRealtime(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -27,7 +27,7 @@ func GetRealtime(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Call Stock Service
+	// 调用股票服务
 	rpcReq := &stock.GetRealtimeRequest{
 		Code: req.Code,
 	}
@@ -37,7 +37,7 @@ func GetRealtime(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Map response
+	// 映射响应
 	resp := &api.RealtimeResponse{}
 	if rpcResp.Stock != nil {
 		resp.Code = rpcResp.Stock.Code
@@ -51,7 +51,84 @@ func GetRealtime(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GetFinancialReport .
+type GetEvaluationsReq struct {
+	StockCode string `query:"code"`
+	Limit     int32  `query:"limit"`
+	Offset    int32  `query:"offset"`
+}
+
+type EvaluationRec struct {
+	ID             string  `json:"id"`
+	PredictionID   string  `json:"prediction_id"`
+	StockCode      string  `json:"stock_code"`
+	PredictionDate string  `json:"prediction_date"`
+	InitialPrice   float64 `json:"initial_price"`
+	Price1D        float64 `json:"price_1d"`
+	Price2D        float64 `json:"price_2d"`
+	Price3D        float64 `json:"price_3d"`
+	Score          float64 `json:"score"`
+	Status         string  `json:"status"`
+	StockName      string  `json:"stock_name"`
+}
+
+type GetEvaluationsResp struct {
+	Evaluations []*EvaluationRec `json:"evaluations"`
+}
+
+// GetEvaluations 获取评估记录
+// @router /api/evaluations [GET]
+func GetEvaluations(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req GetEvaluationsReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.GetEvaluationsRequest{
+		StockCode: req.StockCode,
+		Limit:     req.Limit,
+		Offset:    req.Offset,
+	}
+	rpcResp, err := rpc.StockClient.GetEvaluations(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &GetEvaluationsResp{
+		Evaluations: make([]*EvaluationRec, 0),
+	}
+	for _, e := range rpcResp.Evaluations {
+		// 尝试获取股票名称
+		stockName := ""
+		// 优化：实际场景应批量获取名称或由服务返回。
+		// 由于此处不易修改 IDL，暂且逐个获取作为变通。
+		// 使用短超时或忽略错误。
+		if info, err := rpc.StockClient.GetRealtime(ctx, &stock.GetRealtimeRequest{Code: e.StockCode}); err == nil && info.Stock != nil {
+			stockName = info.Stock.Name
+		}
+
+		resp.Evaluations = append(resp.Evaluations, &EvaluationRec{
+			ID:             e.Id,
+			PredictionID:   e.PredictionId,
+			StockCode:      e.StockCode,
+			PredictionDate: e.PredictionDate,
+			InitialPrice:   e.InitialPrice,
+			Price1D:        e.Price_1d,
+			Price2D:        e.Price_2d,
+			Price3D:        e.Price_3d,
+			Score:          e.Score,
+			Status:         e.Status,
+			StockName:      stockName,
+		})
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetFinancialReport 获取财务报告
 // @router /api/stocks/:code/financial [GET]
 func GetFinancialReport(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -62,7 +139,7 @@ func GetFinancialReport(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Call Stock Service
+	// 调用股票服务
 	rpcReq := &stock.GetFinancialReportRequest{
 		Code: req.Code,
 	}
@@ -72,7 +149,7 @@ func GetFinancialReport(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Map response
+	// 映射响应
 	resp := &api.GetFinancialReportResponse{
 		Reports: make([]*api.FinancialData, 0),
 	}
@@ -92,7 +169,7 @@ func GetFinancialReport(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GetPrediction .
+// GetPrediction 获取预测
 // @router /api/prediction/:code [POST]
 func GetPrediction(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -103,7 +180,7 @@ func GetPrediction(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Call AI Service
+	// 调用 AI 服务
 	rpcReq := &ai.GetPredictionRequest{
 		Code:        req.Code,
 		Days:        req.Days,
@@ -117,7 +194,7 @@ func GetPrediction(ctx context.Context, c *app.RequestContext) {
 	}
 
 	if rpcResp.Result_ == nil {
-		c.String(consts.StatusInternalServerError, "AI service returned empty result")
+		c.String(consts.StatusInternalServerError, "AI 服务返回结果为空")
 		return
 	}
 
@@ -131,7 +208,7 @@ func GetPrediction(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// RecognizeStockImage .
+// RecognizeStockImage 识别股票图片
 // @router /api/image/recognize [POST]
 func RecognizeStockImage(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -142,44 +219,44 @@ func RecognizeStockImage(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Read image file
+	// 读取图片文件
 	fileHeader, err := c.FormFile("image")
 	if err != nil {
-		c.String(consts.StatusBadRequest, "Missing image file")
+		c.String(consts.StatusBadRequest, "缺少图片文件")
 		return
 	}
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		c.String(consts.StatusInternalServerError, "Failed to open image file")
+		c.String(consts.StatusInternalServerError, "打开图片文件失败")
 		return
 	}
 	defer file.Close()
 
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		c.String(consts.StatusInternalServerError, "Failed to read image file")
+		c.String(consts.StatusInternalServerError, "读取图片文件失败")
 		return
 	}
 
 	model := c.PostForm("model")
 
-	// Call AI Service
+	// 调用 AI 服务
 	rpcReq := &ai.ImageRecognitionRequest{
 		ImageData: fileBytes,
 		Model:     model,
 	}
 
-	hlog.Info("Calling AI Service for Image Recognition...")
+	hlog.Info("正在调用 AI 服务进行图像识别...")
 	rpcResp, err := rpc.AIClient.ImageRecognition(ctx, rpcReq)
 	if err != nil {
-		hlog.Errorf("AI Service failed: %v", err)
+		hlog.Errorf("AI 服务失败: %v", err)
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
 	}
-	hlog.Info("AI Service returned successfully")
+	hlog.Info("AI 服务返回成功")
 
-	// Map response
+	// 映射响应
 	resp := &api.ImageRecognitionResponse{
 		Stocks: make([]*api.RecognizedStock, 0),
 	}
@@ -196,7 +273,7 @@ func RecognizeStockImage(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// MarketReview .
+// MarketReview 市场复盘
 // @router /api/market/review [POST]
 func MarketReview(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -207,7 +284,7 @@ func MarketReview(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Call AI Service
+	// 调用 AI 服务
 	rpcReq := &ai.MarketReviewRequest{
 		Date:         req.Date,
 		FocusSectors: req.FocusSectors,
@@ -230,7 +307,7 @@ func MarketReview(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GetSectorStocks .
+// GetSectorStocks 获取板块成分股
 // @router /api/stock/sector/stocks [GET]
 func GetSectorStocks(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -270,7 +347,7 @@ func GetSectorStocks(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GetDragonTigerList .
+// GetDragonTigerList 获取龙虎榜
 // @router /api/stock/dragontiger/list [GET]
 func GetDragonTigerList(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -296,7 +373,7 @@ func GetDragonTigerList(ctx context.Context, c *app.RequestContext) {
 
 	if rpcResp.Items != nil {
 		for _, item := range rpcResp.Items {
-			// Map Seats
+			// 映射席位
 			buySeats := make([]*api.DragonTigerSeat, 0)
 			for _, bs := range item.BuySeats {
 				buySeats = append(buySeats, &api.DragonTigerSeat{
@@ -334,7 +411,7 @@ func GetDragonTigerList(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// AnalyzeMarket .
+// AnalyzeMarket 市场分析
 // @router /api/market/analysis [POST]
 func AnalyzeMarket(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -368,7 +445,7 @@ func AnalyzeMarket(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GetMarketSectors .
+// GetMarketSectors 获取市场板块
 // @router /api/market/sectors [GET]
 func GetMarketSectors(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -407,7 +484,7 @@ func GetMarketSectors(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GetLimitUpPool .
+// GetLimitUpPool 获取涨停池
 // @router /api/market/limit_up [GET]
 func GetLimitUpPool(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -445,7 +522,7 @@ func GetLimitUpPool(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// GetOrCreateUser .
+// GetOrCreateUser 获取或创建用户
 // @router /api/user/login [POST]
 func GetOrCreateUser(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -477,7 +554,7 @@ func GetOrCreateUser(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// AddWatchlist .
+// AddWatchlist 添加自选股
 // @router /api/watchlist/add [POST]
 func AddWatchlist(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -492,7 +569,7 @@ func AddWatchlist(ctx context.Context, c *app.RequestContext) {
 		UserId:    req.UserID,
 		StockCode: req.StockCode,
 	}
-	hlog.CtxInfof(ctx, "AddWatchlist Request: UserID=%s, StockCode=%s", req.UserID, req.StockCode)
+	hlog.CtxInfof(ctx, "添加自选股请求: UserID=%s, StockCode=%s", req.UserID, req.StockCode)
 
 	rpcResp, err := rpc.StockClient.AddWatchlist(ctx, rpcReq)
 	if err != nil {
@@ -503,7 +580,7 @@ func AddWatchlist(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, &api.AddWatchlistResponse{Success: rpcResp.Success})
 }
 
-// GetWatchlist .
+// GetWatchlist 获取自选股列表
 // @router /api/watchlist/list [GET]
 func GetWatchlist(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -537,7 +614,7 @@ func GetWatchlist(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, resp)
 }
 
-// RemoveWatchlist .
+// RemoveWatchlist 移除自选股
 // @router /api/watchlist/remove [POST]
 func RemoveWatchlist(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -561,7 +638,7 @@ func RemoveWatchlist(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, &api.RemoveWatchlistResponse{Success: rpcResp.Success})
 }
 
-// GetHistoricalKline .
+// GetHistoricalKline 获取历史K线
 // @router /api/stock/kline [GET]
 func GetHistoricalKline(ctx context.Context, c *app.RequestContext) {
 	var err error
@@ -597,4 +674,27 @@ func GetHistoricalKline(ctx context.Context, c *app.RequestContext) {
 	}
 
 	c.JSON(consts.StatusOK, resp)
+}
+
+// DeleteEvaluation 删除评估
+// @router /api/evaluations/:id [DELETE]
+func DeleteEvaluation(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req api.DeleteEvaluationRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rpcReq := &stock.DeleteEvaluationRequest{
+		Id: req.Id,
+	}
+	rpcResp, err := rpc.StockClient.DeleteEvaluation(ctx, rpcReq)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(consts.StatusOK, &api.DeleteEvaluationResponse{Success: rpcResp.Success})
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
+	"github.com/hertz-contrib/cors"
 	"stock_assistant/backend/gateway/biz/rpc"
 )
 
@@ -19,6 +20,8 @@ func main() {
 		server.WithIdleTimeout(60*time.Second),
 		server.WithMaxRequestBodySize(10*1024*1024), // 10MB
 	)
+
+	h.Use(cors.Default())
 
 	register(h)
 	h.Spin()

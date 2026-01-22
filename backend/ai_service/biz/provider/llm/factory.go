@@ -40,7 +40,7 @@ func NewModel(ctx context.Context, cfg ModelConfig) (llms.Model, error) {
 			openai.WithBaseURL(cfg.BaseURL),
 		)
 	case ProviderZhipu:
-		// Zhipu AI compatible with OpenAI
+		// 智谱 AI 兼容 OpenAI
 		// BaseURL: https://open.bigmodel.cn/api/paas/v4/
 		baseURL := cfg.BaseURL
 		if baseURL == "" {
@@ -52,7 +52,7 @@ func NewModel(ctx context.Context, cfg ModelConfig) (llms.Model, error) {
 			openai.WithBaseURL(baseURL),
 		)
 	case ProviderQwen:
-		// Qwen (DashScope) compatible with OpenAI
+		// 通义千问 (DashScope) 兼容 OpenAI
 		// BaseURL: https://dashscope.aliyuncs.com/compatible-mode/v1
 		baseURL := cfg.BaseURL
 		if baseURL == "" {
@@ -64,7 +64,7 @@ func NewModel(ctx context.Context, cfg ModelConfig) (llms.Model, error) {
 			openai.WithBaseURL(baseURL),
 		)
 	case ProviderDoubao:
-		// Doubao (Volcengine) compatible with OpenAI
+		// 豆包 (火山引擎) 兼容 OpenAI
 		// BaseURL: https://ark.cn-beijing.volces.com/api/v3
 		baseURL := cfg.BaseURL
 		if baseURL == "" {
@@ -76,7 +76,7 @@ func NewModel(ctx context.Context, cfg ModelConfig) (llms.Model, error) {
 			openai.WithBaseURL(baseURL),
 		)
 	case ProviderDeepSeek:
-		// DeepSeek compatible with OpenAI
+		// DeepSeek 兼容 OpenAI
 		// BaseURL: https://api.deepseek.com
 		baseURL := cfg.BaseURL
 		if baseURL == "" {
@@ -88,6 +88,6 @@ func NewModel(ctx context.Context, cfg ModelConfig) (llms.Model, error) {
 			openai.WithBaseURL(baseURL),
 		)
 	default:
-		return nil, fmt.Errorf("unsupported provider: %s", cfg.Provider)
+		return nil, fmt.Errorf("不支持的提供商: %s", cfg.Provider)
 	}
 }

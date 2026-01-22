@@ -170,6 +170,8 @@ type Client interface {
 	SaveIntradaySignal(ctx context.Context, req *stock.SaveIntradaySignalRequest, callOptions ...callopt.Option) (r *stock.SaveIntradaySignalResponse, err error)
 	GetIntradaySignals(ctx context.Context, req *stock.GetIntradaySignalsRequest, callOptions ...callopt.Option) (r *stock.GetIntradaySignalsResponse, err error)
 	GetHistoricalKline(ctx context.Context, req *stock.GetHistoricalKlineRequest, callOptions ...callopt.Option) (r *stock.GetHistoricalKlineResponse, err error)
+	SavePrediction(ctx context.Context, req *stock.SavePredictionRequest, callOptions ...callopt.Option) (r *stock.SavePredictionResponse, err error)
+	GetEvaluations(ctx context.Context, req *stock.GetEvaluationsRequest, callOptions ...callopt.Option) (r *stock.GetEvaluationsResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -264,6 +266,16 @@ func (p *kStockServiceClient) GetIntradaySignals(ctx context.Context, req *stock
 func (p *kStockServiceClient) GetHistoricalKline(ctx context.Context, req *stock.GetHistoricalKlineRequest, callOptions ...callopt.Option) (r *stock.GetHistoricalKlineResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetHistoricalKline(ctx, req)
+}
+
+func (p *kStockServiceClient) SavePrediction(ctx context.Context, req *stock.SavePredictionRequest, callOptions ...callopt.Option) (r *stock.SavePredictionResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.SavePrediction(ctx, req)
+}
+
+func (p *kStockServiceClient) GetEvaluations(ctx context.Context, req *stock.GetEvaluationsRequest, callOptions ...callopt.Option) (r *stock.GetEvaluationsResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetEvaluations(ctx, req)
 }
 `
 	os.WriteFile("kitex_gen/stock/stockservice/client.go", []byte(stockClientContent), 0644)

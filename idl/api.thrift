@@ -140,7 +140,30 @@ struct GetHistoricalKlineResponse {
     1: list<Kline> klines
 }
 
-struct User {
+struct EvaluationRecord {
+    1: string id
+    2: string prediction_id
+    3: string stock_code
+    4: string prediction_date
+    5: double initial_price
+    6: double price_1d
+    7: double price_2d
+    8: double price_3d
+    9: double score
+    10: string status
+}
+
+struct GetEvaluationsRequest {
+    1: string stock_code (api.query="code")
+    2: i32 limit (api.query="limit")
+    3: i32 offset (api.query="offset")
+}
+
+struct GetEvaluationsResponse {
+    1: list<EvaluationRecord> evaluations
+}
+
+service StockAPI {User {
     1: string id
     2: string username
     3: string created_at
@@ -256,4 +279,8 @@ service StockAPI {
     
     // Phase 2 New: Fractal Data
     GetHistoricalKlineResponse GetHistoricalKline(1: GetHistoricalKlineRequest req) (api.get="/api/stock/kline")
+
+    // Phase 3: Prediction Evaluation
+    GetEvaluationsResponse GetEvaluations(1: GetEvaluationsRequest req) (api.get="/api/evaluations")
+    DeleteEvaluationResponse DeleteEvaluation(1: DeleteEvaluationRequest req) (api.delete="/api/evaluations/:id")
 }

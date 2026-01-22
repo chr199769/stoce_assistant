@@ -19,7 +19,7 @@ func Init() {
 
 	dsn := os.Getenv("MYSQL_DSN")
 	if dsn == "" {
-		dsn = "root:12345678@tcp(127.0.0.1:3306)/stock_assistant?charset=utf8mb4&parseTime=True&loc=Local"
+		dsn = "root:12345678@tcp(127.0.0.1:3306)/stock_assistant?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai"
 	}
 
 	var err error
@@ -37,6 +37,8 @@ func Init() {
 		&model.UserWatchlist{},
 		&model.IntradaySignal{},
 		&model.User{},
+		&model.PredictionRecord{},
+		&model.EvaluationRecord{},
 	)
 	if err != nil {
 		fmt.Printf("Warning: Failed to auto migrate: %v\n", err)

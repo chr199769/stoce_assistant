@@ -19,6 +19,8 @@ func Register(r *server.Hertz) {
 	root := r.Group("/", rootMw()...)
 	{
 		_api := root.Group("/api", _apiMw()...)
+		_api.GET("/evaluations", append(_getevaluationsMw(), api.GetEvaluations)...)
+		_api.DELETE("/evaluations/:id", append(_getevaluationsMw(), api.DeleteEvaluation)...)
 		{
 			_image := _api.Group("/image", _imageMw()...)
 			_image.POST("/recognize", append(_recognizestockimageMw(), api.RecognizeStockImage)...)

@@ -33,7 +33,7 @@ export const recognizeStockImage = async (imageUri: string, imageType: string, i
     headers: {
       'Content-Type': 'multipart/form-data',
     },
-    timeout: 60000, // Explicitly set timeout to 60s
+    timeout: 60000, // 显式设置超时为60秒
   });
   return response.data;
 };

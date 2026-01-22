@@ -1,6 +1,6 @@
-Address: ":8888"
+Address: ":8889"
 EnableDebugServer: true
-DebugServerPort: "18888"
+DebugServerPort: "18889"
 Log:
   Dir: log # Notice: the priority of env 'KITEX_LOG_DIR' is higher than this 'Dir'
   Loggers:

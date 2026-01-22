@@ -140,3 +140,7 @@ func _removewatchlistMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getevaluationsMw() []app.HandlerFunc {
+	return nil
+}

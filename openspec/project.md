@@ -63,7 +63,7 @@
 - **市场数据**: 新浪财经 API (Sina Finance)。
 - **AI 模型**: 
   - OpenAI (GPT-4o)
-  - Zhipu AI (GLM-4.6v-flash)
+  - Zhipu AI (GLM-4.7-flash)
   - Aliyun Qwen (Qwen-Turbo)
   - Volcengine Doubao (Doubao-Pro-4k)
   - DeepSeek (DeepSeek-Chat)

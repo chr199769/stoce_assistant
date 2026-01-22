@@ -213,6 +213,60 @@ struct GetHistoricalKlineResponse {
     1: list<Kline> klines
 }
 
+// --- Prediction Evaluation ---
+
+struct PredictionRecord {
+    1: string id
+    2: string stock_code
+    3: string prediction_date
+    4: string content
+    5: double confidence
+    6: string trend // "up", "down", "neutral"
+    7: double target_price // optional
+    8: double stop_loss_price // optional
+    9: string trace_id // Langfuse Trace ID
+}
+
+struct SavePredictionRequest {
+    1: PredictionRecord record
+}
+
+struct SavePredictionResponse {
+    1: bool success
+}
+
+struct EvaluationRecord {
+    1: string id
+    2: string prediction_id
+    3: string stock_code
+    4: string prediction_date
+    5: double initial_price
+    6: double price_1d
+    7: double price_2d
+    8: double price_3d
+    9: double score
+    10: string status // "pending", "completed"
+    11: string stock_name
+}
+
+struct GetEvaluationsRequest {
+    1: string stock_code
+    2: i32 limit
+    3: i32 offset
+}
+
+struct GetEvaluationsResponse {
+    1: list<EvaluationRecord> evaluations
+}
+
+struct DeleteEvaluationRequest {
+    1: string id
+}
+
+struct DeleteEvaluationResponse {
+    1: bool success
+}
+
 service StockService {
     GetRealtimeResponse GetRealtime(1: GetRealtimeRequest req)
     GetFinancialReportResponse GetFinancialReport(1: GetFinancialReportRequest req)
@@ -235,4 +289,9 @@ service StockService {
     GetIntradaySignalsResponse GetIntradaySignals(1: GetIntradaySignalsRequest req)
     
     GetHistoricalKlineResponse GetHistoricalKline(1: GetHistoricalKlineRequest req)
+
+    // Prediction Evaluation
+    SavePredictionResponse SavePrediction(1: SavePredictionRequest req)
+    GetEvaluationsResponse GetEvaluations(1: GetEvaluationsRequest req)
+    DeleteEvaluationResponse DeleteEvaluation(1: DeleteEvaluationRequest req)
 }

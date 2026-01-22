@@ -174,11 +174,11 @@ func GetMarketNews() ([]string, error) {
 
 	var sinaResp SinaNewsResponse
 	if err := json.Unmarshal(body, &sinaResp); err != nil {
-		return nil, fmt.Errorf("json parse error: %v", err)
+		return nil, fmt.Errorf("json 解析错误: %v", err)
 	}
 
 	if sinaResp.Result.Status.Code != 0 {
-		return nil, fmt.Errorf("api error: %s", sinaResp.Result.Status.Msg)
+		return nil, fmt.Errorf("api 错误: %s", sinaResp.Result.Status.Msg)
 	}
 
 	var news []string
@@ -196,7 +196,7 @@ func (t *MarketInfoTool) Name() string {
 }
 
 func (t *MarketInfoTool) Description() string {
-	return "Comprehensive Market Intelligence Tool. Use it to fetch: 1. Specific Stock News (input stock code), 2. Social Trends (Toutiao/Baidu/Weibo), 3. General Market News & Policy. Input can be a stock code (e.g., '600519') or empty for general market info."
+	return "综合市场情报工具。用于获取：1. 特定股票新闻（输入股票代码），2. 社交趋势（头条/百度/微博），3. 一般市场新闻和政策。输入可以是股票代码（如 '600519'）或为空以获取一般市场信息。"
 }
 
 func (t *MarketInfoTool) Call(ctx context.Context, input string) (string, error) {
@@ -207,41 +207,41 @@ func (t *MarketInfoTool) Call(ctx context.Context, input string) (string, error)
 
 	var sb strings.Builder
 
-	// 1. Specific Stock Info (if code provided)
+	// 1. 特定股票信息（如果提供了代码）
 	if stockCode != "" {
-		sb.WriteString(fmt.Sprintf("=== Specific Info for %s ===\n", stockCode))
+		sb.WriteString(fmt.Sprintf("=== %s 的详细信息 ===\n", stockCode))
 
-		// A. Stock News
-		sb.WriteString("[Recent News]\n")
+		// A. 股票新闻
+		sb.WriteString("[近期新闻]\n")
 		news, err := t.EastMoneyClient.GetStockNews(ctx, stockCode)
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("Error fetching news: %v\n", err))
+			sb.WriteString(fmt.Sprintf("获取新闻失败: %v\n", err))
 		} else if len(news) == 0 {
-			sb.WriteString("No recent news found.\n")
+			sb.WriteString("未找到近期新闻。\n")
 		} else {
 			for _, n := range news {
 				sb.WriteString(fmt.Sprintf("- %s\n", n.String()))
 			}
 		}
 
-		// B. Dragon & Tiger List
-		sb.WriteString("\n[Dragon & Tiger List Status]\n")
+		// B. 龙虎榜状态
+		sb.WriteString("\n[龙虎榜状态]\n")
 		onList, details, err := t.EastMoneyClient.GetDragonTigerStatus(ctx, stockCode)
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("Error checking list: %v\n", err))
+			sb.WriteString(fmt.Sprintf("检查龙虎榜失败: %v\n", err))
 		} else if onList {
-			sb.WriteString(fmt.Sprintf("YES. Details: %s\n", details))
+			sb.WriteString(fmt.Sprintf("是。详情: %s\n", details))
 		} else {
-			sb.WriteString("No (Not on today's list)\n")
+			sb.WriteString("否 (今日未上榜)\n")
 		}
 		sb.WriteString("\n")
 	}
 
-	// 2. Social Trends (Macro Sentiment)
-	sb.WriteString("=== Social Trends (Macro Sentiment) ===\n")
+	// 2. 社交趋势 (宏观情绪)
+	sb.WriteString("=== 社交趋势 (宏观情绪) ===\n")
 	trends, err := GetAllTrends()
 	if err != nil {
-		sb.WriteString(fmt.Sprintf("Error fetching trends: %v\n", err))
+		sb.WriteString(fmt.Sprintf("获取趋势失败: %v\n", err))
 	} else {
 		// If input is specific stock, try to filter trends relevant to it?
 		// Or just show top trends briefly?
@@ -252,11 +252,11 @@ func (t *MarketInfoTool) Call(ctx context.Context, input string) (string, error)
 	}
 	sb.WriteString("\n")
 
-	// 3. General Market News & Policy
-	sb.WriteString("=== General Market & Policy News ===\n")
+	// 3. 一般市场新闻与政策
+	sb.WriteString("=== 一般市场与政策新闻 ===\n")
 	marketNews, err := GetMarketNews()
 	if err != nil {
-		sb.WriteString(fmt.Sprintf("Error fetching market news: %v\n", err))
+		sb.WriteString(fmt.Sprintf("获取市场新闻失败: %v\n", err))
 	} else {
 		// Filter logic
 		keywords := []string{"马斯克", "特朗普", "政策", "行业", "板块", "Musk", "Trump", "央行", "证监会", "国务院"}
@@ -276,12 +276,12 @@ func (t *MarketInfoTool) Call(ctx context.Context, input string) (string, error)
 		}
 
 		if len(relevantNews) > 0 {
-			sb.WriteString("Found relevant/influential news:\n")
+			sb.WriteString("发现相关/重要新闻:\n")
 			for _, n := range relevantNews {
 				sb.WriteString(fmt.Sprintf("- %s\n", n))
 			}
 		} else {
-			sb.WriteString("No specific mentions of Key Figures/Policy in top 50 flash news. Showing top 5 general news:\n")
+			sb.WriteString("在前 50 条快讯中未发现关键人物/政策的具体提及。显示前 5 条一般新闻:\n")
 			for i, n := range marketNews {
 				if i >= 5 {
 					break

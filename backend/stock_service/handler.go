@@ -6,25 +6,25 @@ import (
 	"fmt"
 	"time"
 
+	"sort"
 	eastmoney "stock_assistant/backend/common/eastmoney"
 	"stock_assistant/backend/stock_service/biz/provider/sentiment"
 	"stock_assistant/backend/stock_service/biz/provider/sina"
-	"stock_assistant/backend/stock_service/dal/redis"
 	"stock_assistant/backend/stock_service/dal/model"
 	"stock_assistant/backend/stock_service/dal/mysql"
+	"stock_assistant/backend/stock_service/dal/redis"
 	stock "stock_assistant/backend/stock_service/kitex_gen/stock"
-	"sort"
 	"strings"
 )
 
-// StockServiceImpl implements the last service interface defined in the IDL.
+// StockServiceImpl 实现 IDL 定义的服务接口
 type StockServiceImpl struct {
 	sinaClient      *sina.Client
 	eastMoneyClient *eastmoney.Client
 	sentimentClient *sentiment.Client
 }
 
-// NewStockServiceImpl creates a new StockServiceImpl
+// NewStockServiceImpl 创建新的 StockServiceImpl
 func NewStockServiceImpl() *StockServiceImpl {
 	return &StockServiceImpl{
 		sinaClient:      sina.NewClient(),
@@ -33,7 +33,7 @@ func NewStockServiceImpl() *StockServiceImpl {
 	}
 }
 
-// GetRealtime implements the StockServiceImpl interface.
+// GetRealtime 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetRealtime(ctx context.Context, req *stock.GetRealtimeRequest) (resp *stock.GetRealtimeResponse, err error) {
 	if req.Code == "" {
 		return &stock.GetRealtimeResponse{}, nil
@@ -41,8 +41,7 @@ func (s *StockServiceImpl) GetRealtime(ctx context.Context, req *stock.GetRealti
 
 	info, err := s.sinaClient.GetStockInfo(ctx, req.Code)
 	if err != nil {
-		// Log error and return empty response or specific error code
-		// For now, return error
+		// 记录错误并返回错误
 		return nil, err
 	}
 
@@ -51,7 +50,7 @@ func (s *StockServiceImpl) GetRealtime(ctx context.Context, req *stock.GetRealti
 	}, nil
 }
 
-// GetFinancialReport implements the StockServiceImpl interface.
+// GetFinancialReport 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetFinancialReport(ctx context.Context, req *stock.GetFinancialReportRequest) (resp *stock.GetFinancialReportResponse, err error) {
 	if req.Code == "" {
 		return &stock.GetFinancialReportResponse{}, nil
@@ -79,25 +78,25 @@ func (s *StockServiceImpl) GetFinancialReport(ctx context.Context, req *stock.Ge
 	}, nil
 }
 
-// GetMarketSectors implements the StockServiceImpl interface.
+// GetMarketSectors 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest) (resp *stock.GetMarketSectorsResponse, err error) {
 	limit := int(req.Limit)
 	if limit <= 0 {
 		limit = 20
 	}
 
-	// Default type
+	// 默认类型
 	rankType := req.Type
 	if rankType == "" {
 		rankType = "concept"
 	}
 
-	// Try Redis Cache first
+	// 优先尝试 Redis 缓存
 	cacheKey := fmt.Sprintf("market:sector:rank:%s", rankType)
 	if cached, err := redis.Get(ctx, cacheKey); err == nil && cached != "" {
 		var thriftSectors []*stock.SectorInfo
 		if err := json.Unmarshal([]byte(cached), &thriftSectors); err == nil {
-			// If cached sectors found, check limit
+			// 如果找到缓存，检查 limit
 			if len(thriftSectors) > limit {
 				thriftSectors = thriftSectors[:limit]
 			}
@@ -110,7 +109,7 @@ func (s *StockServiceImpl) GetMarketSectors(ctx context.Context, req *stock.GetM
 		return nil, err
 	}
 
-	// Convert to thrift struct
+	// 转换为 thrift 结构
 	var thriftSectors []*stock.SectorInfo
 	for _, sec := range sectors {
 		thriftSectors = append(thriftSectors, &stock.SectorInfo{
@@ -124,7 +123,7 @@ func (s *StockServiceImpl) GetMarketSectors(ctx context.Context, req *stock.GetM
 		})
 	}
 
-	// Set Redis Cache (TTL 60s)
+	// 设置 Redis 缓存 (TTL 60s)
 	if bytes, err := json.Marshal(thriftSectors); err == nil {
 		_ = redis.Set(ctx, cacheKey, string(bytes), 60*time.Second)
 	}
@@ -132,10 +131,10 @@ func (s *StockServiceImpl) GetMarketSectors(ctx context.Context, req *stock.GetM
 	return &stock.GetMarketSectorsResponse{Sectors: thriftSectors}, nil
 }
 
-// GetLimitUpPool implements the StockServiceImpl interface.
+// GetLimitUpPool 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest) (resp *stock.GetLimitUpPoolResponse, err error) {
-	// Try Redis Cache first (only if date is not specified or is today)
-	// For simplicity, we only cache the "current" pool
+	// 优先尝试 Redis 缓存
+	// 为简单起见，我们只缓存“当前”池
 	cacheKey := "market:limit_up:pool"
 
 	if cached, err := redis.Get(ctx, cacheKey); err == nil && cached != "" {
@@ -145,7 +144,7 @@ func (s *StockServiceImpl) GetLimitUpPool(ctx context.Context, req *stock.GetLim
 		}
 	}
 
-	// Note: req.Date is currently ignored by the simple implementation, but could be passed if upgraded.
+	// 注意: req.Date 目前被简单实现忽略，如果升级可以传递。
 	pool, err := s.sentimentClient.GetLimitUpPool(ctx)
 	if err != nil {
 		return nil, err
@@ -164,7 +163,7 @@ func (s *StockServiceImpl) GetLimitUpPool(ctx context.Context, req *stock.GetLim
 		})
 	}
 
-	// Set Redis Cache (TTL 30s)
+	// 设置 Redis 缓存 (TTL 30s)
 	if len(thriftStocks) > 0 {
 		if bytes, err := json.Marshal(thriftStocks); err == nil {
 			_ = redis.Set(ctx, cacheKey, string(bytes), 30*time.Second)
@@ -174,13 +173,13 @@ func (s *StockServiceImpl) GetLimitUpPool(ctx context.Context, req *stock.GetLim
 	return &stock.GetLimitUpPoolResponse{Stocks: thriftStocks}, nil
 }
 
-// GetSectorStocks implements the StockServiceImpl interface.
+// GetSectorStocks 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest) (resp *stock.GetSectorStocksResponse, err error) {
 	if req.SectorCode == "" {
 		return &stock.GetSectorStocksResponse{}, nil
 	}
 
-	// Call client
+	// 调用客户端
 	rawStocks, err := s.eastMoneyClient.GetSectorStocksRaw(ctx, req.SectorCode)
 	if err != nil {
 		return nil, err
@@ -202,7 +201,7 @@ func (s *StockServiceImpl) GetSectorStocks(ctx context.Context, req *stock.GetSe
 	return &stock.GetSectorStocksResponse{Stocks: list}, nil
 }
 
-// GetDragonTigerList implements the StockServiceImpl interface.
+// GetDragonTigerList 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest) (resp *stock.GetDragonTigerListResponse, err error) {
 	date := req.Date
 	if date == "" {
@@ -214,18 +213,18 @@ func (s *StockServiceImpl) GetDragonTigerList(ctx context.Context, req *stock.Ge
 		return nil, err
 	}
 
-	// Sort by Net Inflow Desc
+	// 按净流入降序排序
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].NetInflow > items[j].NetInflow
 	})
 
-	// Seat Mapping Map
+	// 席位映射表
 	seatMap := map[string]string{
-		"华泰证券股份有限公司北京雍和宫证券营业部":      "赵老哥",
+		"华泰证券股份有限公司北京雍和宫证券营业部":       "赵老哥",
 		"国泰君安证券股份有限公司上海江苏路证券营业部":     "章盟主",
-		"中国银河证券股份有限公司北京绍兴路证券营业部":      "赵老哥",
-		"东方财富证券股份有限公司拉萨团结路第二证券营业部": "拉萨天团",
-		"东方财富证券股份有限公司拉萨团结路第一证券营业部": "拉萨天团",
+		"中国银河证券股份有限公司北京绍兴路证券营业部":     "赵老哥",
+		"东方财富证券股份有限公司拉萨团结路第二证券营业部":   "拉萨天团",
+		"东方财富证券股份有限公司拉萨团结路第一证券营业部":   "拉萨天团",
 		"东方财富证券股份有限公司拉萨东环路第二证券营业部":   "拉萨天团",
 		"东方财富证券股份有限公司拉萨东环路第一证券营业部":   "拉萨天团",
 		"招商证券股份有限公司深圳益田路免税商务大厦证券营业部": "益田路",
@@ -234,7 +233,7 @@ func (s *StockServiceImpl) GetDragonTigerList(ctx context.Context, req *stock.Ge
 
 	var thriftItems []*stock.DragonTigerItem
 
-	// Limit detail fetching to Top 10 to avoid timeout
+	// 限制详情获取为前10以避免超时
 	for i, item := range items {
 		tItem := &stock.DragonTigerItem{
 			Code:          item.Code,
@@ -247,7 +246,7 @@ func (s *StockServiceImpl) GetDragonTigerList(ctx context.Context, req *stock.Ge
 			SellSeats:     []*stock.DragonTigerSeat{},
 		}
 
-		if i < 5 { // Only fetch seats for top 5
+		if i < 5 { // 仅获取前5的席位
 			buySeats, sellSeats, err := s.eastMoneyClient.GetDragonTigerSeats(ctx, item.Code, date)
 			if err == nil {
 				tItem.BuySeats = convertSeats(buySeats, seatMap)
@@ -267,7 +266,7 @@ func convertSeats(seats []*eastmoney.DragonTigerSeat, m map[string]string) []*st
 		if t, ok := m[s.Name]; ok {
 			tags = append(tags, t)
 		}
-		// Add other simple checks
+		// 添加其他简单检查
 		if strings.Contains(s.Name, "拉萨") && len(tags) == 0 {
 			tags = append(tags, "拉萨天团")
 		}
@@ -289,20 +288,20 @@ func convertSeats(seats []*eastmoney.DragonTigerSeat, m map[string]string) []*st
 	return res
 }
 
-// GetOrCreateUser implements the StockServiceImpl interface.
+// GetOrCreateUser 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetOrCreateUser(ctx context.Context, req *stock.GetOrCreateUserRequest) (resp *stock.GetOrCreateUserResponse, err error) {
 	if req.Username == "" {
-		return nil, fmt.Errorf("username is required")
+		return nil, fmt.Errorf("用户名是必须的")
 	}
 
 	if mysql.DB == nil {
-		return nil, fmt.Errorf("database not initialized")
+		return nil, fmt.Errorf("数据库未初始化")
 	}
 
 	var user model.User
-	// Find or create
-	// GORM FirstOrCreate: finds by unique constraint or primary key, or creates.
-	// Since Username is uniqueIndex, we search by Username.
+	// 查找或创建
+	// GORM FirstOrCreate: 按唯一约束或主键查找，否则创建。
+	// 由于 Username 是 uniqueIndex，我们按 Username 搜索。
 	err = mysql.DB.Where(model.User{Username: req.Username}).FirstOrCreate(&user).Error
 	if err != nil {
 		return nil, err
@@ -310,20 +309,20 @@ func (s *StockServiceImpl) GetOrCreateUser(ctx context.Context, req *stock.GetOr
 
 	return &stock.GetOrCreateUserResponse{
 		User: &stock.User{
-			Id:        fmt.Sprintf("%d", user.ID), // Convert uint to string
+			Id:        fmt.Sprintf("%d", user.ID), // 转换 uint 为 string
 			Username:  user.Username,
 			CreatedAt: user.CreatedAt.Format(time.RFC3339),
 		},
 	}, nil
 }
 
-// AddWatchlist implements the StockServiceImpl interface.
+// AddWatchlist 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) AddWatchlist(ctx context.Context, req *stock.AddWatchlistRequest) (resp *stock.AddWatchlistResponse, err error) {
 	if mysql.DB == nil {
 		return &stock.AddWatchlistResponse{Success: false}, nil
 	}
 
-	// Normalize stock code
+	// 规范化股票代码
 	code := strings.TrimSpace(req.StockCode)
 	if len(code) == 6 {
 		if strings.HasPrefix(code, "6") {
@@ -336,9 +335,9 @@ func (s *StockServiceImpl) AddWatchlist(ctx context.Context, req *stock.AddWatch
 	item := model.UserWatchlist{
 		UserID:    req.UserId,
 		StockCode: code,
-		Tags:      "[]", // Default empty JSON array
+		Tags:      "[]", // 默认空 JSON 数组
 	}
-	// Check if exists
+	// 检查是否存在
 	var count int64
 	mysql.DB.Model(&model.UserWatchlist{}).Where("user_id = ? AND stock_code = ?", req.UserId, code).Count(&count)
 	if count > 0 {
@@ -351,7 +350,7 @@ func (s *StockServiceImpl) AddWatchlist(ctx context.Context, req *stock.AddWatch
 	return &stock.AddWatchlistResponse{Success: true}, nil
 }
 
-// GetWatchlist implements the StockServiceImpl interface.
+// GetWatchlist 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetWatchlist(ctx context.Context, req *stock.GetWatchlistRequest) (resp *stock.GetWatchlistResponse, err error) {
 	if mysql.DB == nil {
 		return &stock.GetWatchlistResponse{}, nil
@@ -364,14 +363,14 @@ func (s *StockServiceImpl) GetWatchlist(ctx context.Context, req *stock.GetWatch
 
 	var thriftItems []*stock.WatchlistItem
 	for _, item := range items {
-		// Simple JSON parse for tags (not robust but sufficient for now)
-		// Tags is stored as string "[]" or `["A","B"]`
+		// 简单 JSON 解析 tags (目前足够用)
+		// Tags 存储为字符串 "[]" 或 `["A","B"]`
 		tags := []string{}
 		if len(item.Tags) > 2 {
-			// Strip brackets and split
+			// 去除括号并分割
 			content := item.Tags[1 : len(item.Tags)-1]
 			if content != "" {
-				// Split by comma
+				// 按逗号分割
 				parts := strings.Split(content, ",")
 				for _, p := range parts {
 					tags = append(tags, strings.Trim(strings.TrimSpace(p), "\""))
@@ -388,13 +387,13 @@ func (s *StockServiceImpl) GetWatchlist(ctx context.Context, req *stock.GetWatch
 	return &stock.GetWatchlistResponse{Items: thriftItems}, nil
 }
 
-// RemoveWatchlist implements the StockServiceImpl interface.
+// RemoveWatchlist 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) RemoveWatchlist(ctx context.Context, req *stock.RemoveWatchlistRequest) (resp *stock.RemoveWatchlistResponse, err error) {
 	if mysql.DB == nil {
 		return &stock.RemoveWatchlistResponse{Success: false}, nil
 	}
 
-	// Normalize stock code
+	// 规范化股票代码
 	code := strings.TrimSpace(req.StockCode)
 	if len(code) == 6 {
 		if strings.HasPrefix(code, "6") {
@@ -410,7 +409,7 @@ func (s *StockServiceImpl) RemoveWatchlist(ctx context.Context, req *stock.Remov
 	return &stock.RemoveWatchlistResponse{Success: true}, nil
 }
 
-// SaveIntradaySignal implements the StockServiceImpl interface.
+// SaveIntradaySignal 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) SaveIntradaySignal(ctx context.Context, req *stock.SaveIntradaySignalRequest) (resp *stock.SaveIntradaySignalResponse, err error) {
 	if mysql.DB == nil {
 		return &stock.SaveIntradaySignalResponse{Success: false}, nil
@@ -433,15 +432,15 @@ func (s *StockServiceImpl) SaveIntradaySignal(ctx context.Context, req *stock.Sa
 	return &stock.SaveIntradaySignalResponse{Success: true}, nil
 }
 
-// GetIntradaySignals implements the StockServiceImpl interface.
+// GetIntradaySignals 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetIntradaySignals(ctx context.Context, req *stock.GetIntradaySignalsRequest) (resp *stock.GetIntradaySignalsResponse, err error) {
 	if mysql.DB == nil {
 		return &stock.GetIntradaySignalsResponse{}, nil
 	}
 
 	var signals []model.IntradaySignal
-	// Default to last 50 signals
-	// If date is provided, we could filter by date, but keeping it simple for now
+	// 默认最近 50 条信号
+	// 如果提供了日期，我们可以按日期过滤，但目前保持简单
 	if err := mysql.DB.Order("trigger_time desc").Limit(50).Find(&signals).Error; err != nil {
 		return nil, err
 	}
@@ -460,9 +459,9 @@ func (s *StockServiceImpl) GetIntradaySignals(ctx context.Context, req *stock.Ge
 	return &stock.GetIntradaySignalsResponse{Signals: thriftSignals}, nil
 }
 
-// GetHistoricalKline implements the StockServiceImpl interface.
+// GetHistoricalKline 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetHistoricalKline(ctx context.Context, req *stock.GetHistoricalKlineRequest) (resp *stock.GetHistoricalKlineResponse, err error) {
-	// Use EastMoney Client
+	// 使用 EastMoney 客户端
 	klines, err := s.eastMoneyClient.GetKlineHistory(ctx, req.StockCode, int(req.Days))
 	if err != nil {
 		return nil, err
@@ -481,4 +480,133 @@ func (s *StockServiceImpl) GetHistoricalKline(ctx context.Context, req *stock.Ge
 	}
 
 	return &stock.GetHistoricalKlineResponse{Klines: thriftKlines}, nil
+}
+
+// SavePrediction 实现 StockServiceImpl 接口
+func (s *StockServiceImpl) SavePrediction(ctx context.Context, req *stock.SavePredictionRequest) (resp *stock.SavePredictionResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.SavePredictionResponse{Success: false}, nil
+	}
+	if req.Record == nil {
+		return &stock.SavePredictionResponse{Success: false}, nil
+	}
+
+	predDate, _ := time.Parse("2006-01-02 15:04:05", req.Record.PredictionDate)
+	if predDate.IsZero() {
+		predDate = time.Now()
+	}
+
+	record := model.PredictionRecord{
+		ID:             req.Record.Id,
+		StockCode:      req.Record.StockCode,
+		PredictionDate: predDate,
+		Content:        req.Record.Content,
+		Confidence:     req.Record.Confidence,
+		Trend:          req.Record.Trend,
+		TargetPrice:    req.Record.TargetPrice,
+		StopLossPrice:  req.Record.StopLossPrice,
+		TraceID:        req.Record.TraceId,
+	}
+
+	if err := mysql.DB.Create(&record).Error; err != nil {
+		return &stock.SavePredictionResponse{Success: false}, nil
+	}
+
+	// 同时创建初始评估记录
+	eval := model.EvaluationRecord{
+		ID:             fmt.Sprintf("eval-%s", record.ID), // 简单 ID 生成
+		PredictionID:   record.ID,
+		StockCode:      record.StockCode,
+		PredictionDate: record.PredictionDate,
+		Status:         "pending",
+	}
+
+	// 获取当前价格作为初始价格
+	info, err := s.sinaClient.GetStockInfo(ctx, record.StockCode)
+	if err == nil {
+		eval.InitialPrice = info.CurrentPrice
+		eval.StockName = info.Name
+	}
+
+	mysql.DB.Create(&eval)
+
+	return &stock.SavePredictionResponse{Success: true}, nil
+}
+
+// GetEvaluations 实现 StockServiceImpl 接口
+func (s *StockServiceImpl) GetEvaluations(ctx context.Context, req *stock.GetEvaluationsRequest) (resp *stock.GetEvaluationsResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.GetEvaluationsResponse{}, nil
+	}
+
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 20
+	}
+	offset := int(req.Offset)
+
+	var evals []model.EvaluationRecord
+	query := mysql.DB.Model(&model.EvaluationRecord{}).Order("prediction_date desc").Limit(limit).Offset(offset)
+
+	if req.StockCode != "" {
+		query = query.Where("stock_code = ?", req.StockCode)
+	}
+
+	if err := query.Find(&evals).Error; err != nil {
+		return nil, err
+	}
+
+	var thriftEvals []*stock.EvaluationRecord
+	for _, e := range evals {
+		thriftEvals = append(thriftEvals, &stock.EvaluationRecord{
+			Id:             e.ID,
+			PredictionId:   e.PredictionID,
+			StockCode:      e.StockCode,
+			PredictionDate: e.PredictionDate.Format("2006-01-02 15:04:05"),
+			InitialPrice:   e.InitialPrice,
+			Price_1d:       e.Price1D,
+			Price_2d:       e.Price2D,
+			Price_3d:       e.Price3D,
+			Score:          e.Score,
+			Status:         e.Status,
+		})
+	}
+
+	return &stock.GetEvaluationsResponse{Evaluations: thriftEvals}, nil
+}
+
+// DeleteEvaluation 实现 StockServiceImpl 接口
+func (s *StockServiceImpl) DeleteEvaluation(ctx context.Context, req *stock.DeleteEvaluationRequest) (resp *stock.DeleteEvaluationResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.DeleteEvaluationResponse{Success: false}, nil
+	}
+
+	tx := mysql.DB.Begin()
+	if tx.Error != nil {
+		return &stock.DeleteEvaluationResponse{Success: false}, tx.Error
+	}
+
+	var eval model.EvaluationRecord
+	if err := tx.Where("id = ?", req.Id).First(&eval).Error; err != nil {
+		tx.Rollback()
+		return &stock.DeleteEvaluationResponse{Success: false}, nil
+	}
+
+	if err := tx.Delete(&eval).Error; err != nil {
+		tx.Rollback()
+		return &stock.DeleteEvaluationResponse{Success: false}, nil
+	}
+
+	if eval.PredictionID != "" {
+		if err := tx.Where("id = ?", eval.PredictionID).Delete(&model.PredictionRecord{}).Error; err != nil {
+			tx.Rollback()
+			return &stock.DeleteEvaluationResponse{Success: false}, nil
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return &stock.DeleteEvaluationResponse{Success: false}, err
+	}
+
+	return &stock.DeleteEvaluationResponse{Success: true}, nil
 }

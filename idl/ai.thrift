@@ -5,6 +5,7 @@ struct PredictionResult {
     2: double confidence
     3: string analysis
     4: string news_summary
+    5: string trace_id
 }
 
 struct GetPredictionRequest {

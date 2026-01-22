@@ -23,10 +23,10 @@ type IntradaySentinel struct {
 }
 
 func NewIntradaySentinel() *IntradaySentinel {
-	// Initialize Stock Service Client
+	// 初始化 Stock Service 客户端
 	c, err := stockservice.NewClient("stock_service", client.WithHostPorts("127.0.0.1:8888"))
 	if err != nil {
-		klog.Errorf("Failed to create stock client: %v", err)
+		klog.Errorf("创建 stock 客户端失败: %v", err)
 	}
 
 	return &IntradaySentinel{
@@ -46,7 +46,7 @@ func (s *IntradaySentinel) Start() {
 	s.mu.Unlock()
 
 	go s.loop()
-	klog.Info("Intraday Sentinel started")
+	klog.Info("盘中监控已启动")
 }
 
 func (s *IntradaySentinel) Stop() {
@@ -58,14 +58,14 @@ func (s *IntradaySentinel) Stop() {
 	s.running = false
 	close(s.stopChan)
 	s.mu.Unlock()
-	klog.Info("Intraday Sentinel stopped")
+	klog.Info("盘中监控已停止")
 }
 
 func (s *IntradaySentinel) loop() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	// Run immediately once
+	// 立即运行一次
 	s.scanMarket()
 
 	for {
@@ -80,27 +80,27 @@ func (s *IntradaySentinel) loop() {
 
 func (s *IntradaySentinel) scanMarket() {
 	ctx := context.Background()
-	// 1. Get Sector Ranks (Concept)
+	// 1. 获取板块排行 (概念)
 	sectors, err := s.emClient.GetSectorRank(ctx, "concept", 5)
 	if err != nil {
-		klog.Errorf("Failed to get sector rank: %v", err)
+		klog.Errorf("获取板块排行失败: %v", err)
 		return
 	}
 
-	// 2. Check for strong sectors (Limit Up count, or high net inflow)
+	// 2. 检查强势板块 (涨停数或高净流入)
 	for _, sector := range sectors {
-		if sector.ChangePercent > 3.0 { // Threshold: 3% rise
-			// Found a strong sector, create signal
-			msg := fmt.Sprintf("Sector Alert: %s is up %.2f%% with Net Inflow %.2f", sector.Name, sector.ChangePercent, sector.NetInflow)
+		if sector.ChangePercent > 3.0 { // 阈值: 涨幅 3%
+			// 发现强势板块，创建信号
+			msg := fmt.Sprintf("板块异动: %s 上涨 %.2f%% 净流入 %.2f", sector.Name, sector.ChangePercent, sector.NetInflow)
 			s.saveSignal(ctx, "SECTOR_MOVE", sector.Code, msg, 0)
 		}
 	}
 
-	// 3. TODO: Check for Limit Up Pool changes (requires new EM API method or parsing)
-	// For now, let's just log the top sector
+	// 3. TODO: 检查涨停池变化 (需要新的 EM API 方法或解析)
+	// 目前仅记录头部板块
 	if len(sectors) > 0 {
 		top := sectors[0]
-		klog.Infof("Top Sector: %s (+%.2f%%)", top.Name, top.ChangePercent)
+		klog.Infof("领涨板块: %s (+%.2f%%)", top.Name, top.ChangePercent)
 	}
 }
 
@@ -121,8 +121,8 @@ func (s *IntradaySentinel) saveSignal(ctx context.Context, signalType, code, mes
 
 	_, err := s.stockClient.SaveIntradaySignal(ctx, req)
 	if err != nil {
-		klog.Errorf("Failed to save signal: %v", err)
+		klog.Errorf("保存信号失败: %v", err)
 	} else {
-		klog.Infof("Signal Saved: [%s] %s", signalType, message)
+		klog.Infof("信号已保存: [%s] %s", signalType, message)
 	}
 }

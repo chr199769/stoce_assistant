@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"stock_assistant/backend/ai_service/biz/provider/langfuse"
 	"stock_assistant/backend/ai_service/biz/provider/llm"
 
 	"github.com/joho/godotenv"
@@ -12,7 +13,7 @@ import (
 
 type Config struct {
 	LLMConfig *llm.FileConfig
-	Langfuse  *llm.LangfuseConfig
+	Langfuse  *langfuse.LangfuseConfig
 }
 
 var globalConfig *Config
@@ -44,7 +45,7 @@ func Init() error {
 
 	// 2. Unmarshal Langfuse Config
 	var wrapper struct {
-		Langfuse *llm.LangfuseConfig `json:"langfuse"`
+		Langfuse *langfuse.LangfuseConfig `json:"langfuse"`
 	}
 	if err := json.Unmarshal(file, &wrapper); err != nil {
 		fmt.Printf("Warning: failed to unmarshal langfuse config: %v\n", err)

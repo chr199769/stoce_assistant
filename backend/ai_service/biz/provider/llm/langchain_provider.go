@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"stock_assistant/backend/ai_service/biz/provider/langfuse"
+	"stock_assistant/backend/ai_service/biz/provider/prompt"
 	"stock_assistant/backend/ai_service/biz/tool"
 	"stock_assistant/backend/ai_service/biz/tool/fractal"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
@@ -16,10 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tmc/langchaingo/agents"
-	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/tools"
 )
 
 type LangChainProvider struct {
@@ -34,19 +33,26 @@ func NewLangChainProvider(ctx context.Context, stockClient stockservice.Client, 
 	}, nil
 }
 
-// IsTradingTime checks if the current time is within A-share trading hours (Mon-Fri 9:15-15:00)
-// This is a simplified check and does not account for public holidays.
+// IsTradingTime 检查当前是否在A股交易时段 (周一至周五 9:15-15:00)
+// 这是一个简化检查，未考虑法定节假日。
 func IsTradingTime() bool {
-	now := time.Now()
+	// 强制使用上海时区
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		// 加载失败则回退到固定时区 (CST)
+		loc = time.FixedZone("CST", 8*3600)
+	}
+
+	now := time.Now().In(loc)
 	weekday := now.Weekday()
 
-	// 1. Check if it's weekend
+	// 1. 检查是否为周末
 	if weekday == time.Saturday || weekday == time.Sunday {
 		return false
 	}
 
-	// 2. Check time range 09:15 - 15:00
-	// Convert current time to minutes from midnight for easier comparison
+	// 2. 检查时间范围 09:15 - 15:00
+	// 转换为分钟数以便比较
 	currentMinutes := now.Hour()*60 + now.Minute()
 	startMinutes := 9*60 + 15 // 09:15
 	endMinutes := 15*60 + 0   // 15:00
@@ -54,21 +60,22 @@ func IsTradingTime() bool {
 	return currentMinutes >= startMinutes && currentMinutes <= endMinutes
 }
 
-func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days int32, modelName string) (string, float64, string, error) {
+func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days int32, modelName string) (string, float64, string, string, error) {
 	if modelName == "fractal" {
-		return p.predictWithFractal(ctx, stockCode, days)
+		res, conf, summary, err := p.predictWithFractal(ctx, stockCode, days)
+		return res, conf, summary, "", err
 	}
 
-	// 1. Determine ModelConfig
+	// 1. 确定模型配置
 	var cfg ModelConfig
 	if p.fileConfig != nil {
-		// Find config by model name in all providers
+		// 在所有提供商中查找模型配置
 		found := false
-		// If modelName is provided, search for it
+		// 如果提供了模型名称，则进行搜索
 		if modelName != "" {
-			log.Printf("Searching for model: %s", modelName)
+			log.Printf("正在搜索模型: %s", modelName)
 			for provider, c := range p.fileConfig.Models {
-				log.Printf("Checking provider: %s, model: %s", provider, c.ModelName)
+				log.Printf("检查提供商: %s, 模型: %s", provider, c.ModelName)
 				if c.ModelName == modelName {
 					cfg = c
 					cfg.Provider = ModelProvider(provider)
@@ -78,10 +85,10 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 			}
 		}
 
-		// If not found or not provided, use current provider
+		// 如果未找到或未提供，使用当前提供商
 		if !found {
 			if modelName != "" {
-				log.Printf("Model %s not found in config, falling back to current provider", modelName)
+				log.Printf("配置中未找到模型 %s，回退到当前提供商", modelName)
 			}
 
 			var ok bool
@@ -89,200 +96,179 @@ func (p *LangChainProvider) Predict(ctx context.Context, stockCode string, days 
 			if ok {
 				cfg.Provider = p.fileConfig.CurrentProvider
 			} else {
-				// cfg = ModelConfig{Provider: ProviderFake}
-				return "", 0, "", fmt.Errorf("provider not found and fake provider disabled")
+				return "", 0, "", "", fmt.Errorf("未找到提供商且禁用了 fake 提供商")
 			}
 		}
 	} else {
-		// No file config, fallback
-		// cfg = ModelConfig{Provider: ProviderFake}
-		return "", 0, "", fmt.Errorf("no config found and fake provider disabled")
+		// 无文件配置，回退
+		return "", 0, "", "", fmt.Errorf("未找到配置且禁用了 fake 提供商")
 	}
 
-	log.Printf("Using LLM Provider: %s, Model: %s", cfg.Provider, cfg.ModelName)
+	log.Printf("使用 LLM 提供商: %s, 模型: %s", cfg.Provider, cfg.ModelName)
 
-	// 2. Create LLM
+	// 2. 创建 LLM
 	llm, err := NewModel(ctx, cfg)
 	if err != nil {
-		return "", 0, "", fmt.Errorf("failed to create llm: %w", err)
+		return "", 0, "", "", fmt.Errorf("创建 llm 失败: %w", err)
 	}
 
-	// 3. Create Tools
+	// 启动追踪
+	var traceID string
+	var lf *langfuse.LangfuseManager
+	if lf = langfuse.GetLangfuse(); lf != nil {
+		traceID = lf.CreateTrace(ctx, "StockPrediction", map[string]interface{}{
+			"stock_code": stockCode,
+			"env":        "dev",
+		})
+	}
+
+	// 3. 创建工具 (用于预取数据，不传递给 LLM)
 	stockTool := tool.NewStockPriceTool(p.stockClient)
 	marketTool := tool.NewMarketInfoTool()
 	analysisTool := tool.NewStockAnalysisTool()
 	sectorTool := tool.NewSectorTool(p.stockClient)
 	dtTool := tool.NewDragonTigerTool()
-	t := []tools.Tool{stockTool, marketTool, analysisTool, sectorTool, dtTool}
 
-	// Pre-fetch stock data to ensure accuracy and avoid tool calling failures
-	stockData, err := stockTool.Call(ctx, stockCode)
-	if err != nil {
-		log.Printf("Failed to pre-fetch stock data: %v", err)
-		stockData = fmt.Sprintf("Error fetching stock data: %v", err)
+	// 预取股票数据
+	var stockData string
+	var errFetch error
+	if lf != nil {
+		start := time.Now()
+		stockData, errFetch = stockTool.Call(ctx, stockCode)
+		lf.Span(ctx, traceID, nil, "Tool:StockPrice", stockCode, stockData, start, time.Now())
+	} else {
+		stockData, errFetch = stockTool.Call(ctx, stockCode)
+	}
+	if errFetch != nil {
+		log.Printf("预取股票数据失败: %v", errFetch)
+		stockData = fmt.Sprintf("获取股票数据出错: %v", errFetch)
 	}
 
-	// Pre-fetch market info (news + dragon tiger + trends) using the unified MarketInfoTool
-	marketInfo, _ := marketTool.Call(ctx, stockCode)
+	// 预取市场信息
+	var marketInfo string
+	if lf != nil {
+		start := time.Now()
+		marketInfo, _ = marketTool.Call(ctx, stockCode)
+		lf.Span(ctx, traceID, nil, "Tool:MarketInfo", stockCode, marketInfo, start, time.Now())
+	} else {
+		marketInfo, _ = marketTool.Call(ctx, stockCode)
+	}
 
-	analysisData, _ := analysisTool.Call(ctx, stockCode)
+	var analysisData string
+	if lf != nil {
+		start := time.Now()
+		analysisData, _ = analysisTool.Call(ctx, stockCode)
+		lf.Span(ctx, traceID, nil, "Tool:Analysis", stockCode, analysisData, start, time.Now())
+	} else {
+		analysisData, _ = analysisTool.Call(ctx, stockCode)
+	}
 
-	// Pre-fetch Macro Context
-	sectorContext, _ := sectorTool.Call(ctx, "industry")
-	dtContext, _ := dtTool.Call(ctx, "") // Get today's general list
+	// 预取宏观背景
+	var sectorContext string
+	if lf != nil {
+		start := time.Now()
+		sectorContext, _ = sectorTool.Call(ctx, "industry")
+		lf.Span(ctx, traceID, nil, "Tool:Sector", "industry", sectorContext, start, time.Now())
+	} else {
+		sectorContext, _ = sectorTool.Call(ctx, "industry")
+	}
 
-	// Pre-fetch Fractal Analysis (for reference)
+	var dtContext string
+	if lf != nil {
+		start := time.Now()
+		dtContext, _ = dtTool.Call(ctx, "")
+		lf.Span(ctx, traceID, nil, "Tool:DragonTiger", "today", dtContext, start, time.Now())
+	} else {
+		dtContext, _ = dtTool.Call(ctx, "")
+	}
+
+	// 预取分形分析 (仅供参考)
 	var fractalAnalysisContext string
+	startFractal := time.Now()
 	fractalRes, _, _, err := p.predictWithFractal(ctx, stockCode, days)
 	if err == nil {
-		// Clean up metadata from fractal response to keep prompt clean
+		// 清理分形响应中的元数据，保持提示词整洁
 		parts := strings.Split(fractalRes, "---METADATA---")
 		if len(parts) > 0 {
 			fractalAnalysisContext = strings.TrimSpace(parts[0])
 		}
 	} else {
-		fractalAnalysisContext = "Fractal analysis unavailable."
+		fractalAnalysisContext = "分形分析不可用。"
+	}
+	if lf != nil {
+		lf.Span(ctx, traceID, nil, "Tool:Fractal", stockCode, fractalAnalysisContext, startFractal, time.Now())
 	}
 
-	// 4. Create Agent
-	// ZeroShotReactDescription is good for general purpose tool use
-	agent := agents.NewOneShotAgent(llm, t, agents.WithMaxIterations(5))
-	executor := agents.NewExecutor(agent)
-
-	// 5. Run Chain
-	// Determine Trading Status and Context
+	// 4. 构建消息 (系统 + 用户)
+	// 确定交易状态和上下文
 	isTrading := IsTradingTime()
 	tradingStatusStr := "已收盘"
 	predictionFocus := "次日及未来3日预测"
 	timeContextInstruction := `
-- Current Status: Market Closed (Inter-day / Weekend)
-- Focus: Summarize the full-day performance, analyze Dragon & Tiger List data, and provide an outlook for the next trading day and the next 3 days.
-- Order Book Relevance: Low (Snapshot data is less relevant after close).
+- 当前状态：已收盘（盘后/周末）
+- 重点：总结全天表现，分析龙虎榜数据，并提供下一个交易日及未来3日的展望。
+- 盘口数据相关性：低（收盘后快照数据相关性较低）。
 `
 
 	if isTrading {
 		tradingStatusStr = "盘中交易 (9:15-15:00)"
 		predictionFocus = "当日收盘及未来3日预测"
 		timeContextInstruction = `
-- Current Status: Intraday Trading (Live Market)
-- Focus: Analyze real-time Order Book pressure (Total Buy/Sell), WeiBi/WeiCha, and immediate momentum.
-- Order Book Relevance: HIGH. Use it to predict the price trend for the rest of TODAY.
+- 当前状态：盘中交易（实时市场）
+- 重点：分析实时盘口压力（总买/卖量）、委比/委差以及即时动能。
+- 盘口数据相关性：高。使用它来预测今日剩余时间的股价走势。
 `
 	}
 
-	input := fmt.Sprintf(`You are an expert A-share Trader AI (Professional Fund Manager level).
-Your task is to provide a comprehensive analysis and prediction for the stock %s.
-Current Time Context: %s (%s)
+	// 获取系统提示词
+	systemPromptTemplate := prompt.GetManager().GetPrompt(ctx, prompt.StockPredictionSystem)
+	systemPrompt := fmt.Sprintf(systemPromptTemplate, timeContextInstruction, time.Now().Format("2006-01-02 15:04:05"), predictionFocus)
 
-Here is the real-time data for the stock:
-[Stock Data]
-%s
-
-[Advanced Analysis Data]
-(Includes Order Book, Chip Distribution, Industry Info, Dragon Tiger List History, Stock Heat, Regulatory Notices)
-%s
-
-[Market Intelligence]
-(Includes Recent Stock News, Dragon & Tiger Status, Social Trends, and General Market/Policy News)
-%s
-
-[Macro & Hot Money Context]
-(Includes Top Industries and Today's Dragon Tiger List Overview)
-[Top Industries]:
-%s
-
-[Today's Hot Money (Dragon Tiger List)]:
-%s
-
-[Technical Analysis - Fractal Pattern (Historical Similarity)]:
-%s
-
-Process (Professional Trader Logic):
-1. **Time Context Check**:
-%s
-
-2. **Policy & Macro (The "Sky")**:
-   - Identify if the stock aligns with current national strategic directions.
-   - Check if the stock's industry is in the [Top Industries] list. If yes, it's a "Main Line" stock (High Potential).
-   - Policy-supported sectors enjoy valuation premiums.
-
-3. **Funds & Chips (The "Ground")**:
-   - **Dragon Tiger List**: 
-     - Check if the stock is on [Today's Hot Money] list.
-     - Check "Dragon Tiger List History" in [Advanced Analysis Data].
-     - Identify if "Hot Money" (e.g., Zhao Laoge, Lasa Tiantuan) or "Institutions" are buying.
-   - **Chip Distribution**: Check "Winner Rate" and "Cost Range".
-   - **Order Book**: Analyze intraday pressure.
-
-4. **Sentiment & Psychology (The "People")**:
-   - **Stock Heat (Guba Rank)**: Rank soaring = Short-term explosion.
-   - **Sector Resonance**: Does the stock move with its sector leaders?
-
-5. **Risk Control (The "Shield" - MANDATORY CHECK)**:
-   - **Regulatory Notices**: Check for Inquiry Letters/Regulatory Letters.
-   - **Volatility Rules**: Check for recent abnormal fluctuations.
-
-6. **Prediction**:
-   - Provide a prediction for the trend (Up, Down, Neutral) for BOTH the %s.
-   - Give a confidence score (0-1).
-
-7. **Conclusion**: Summarize the key logic using the "Trader's Perspective".
-
-Output requirements:
-- **Language**: The final answer MUST be in Chinese (Simplified Chinese).
-- **Tone**: Professional, objective, insightful.
-- **Structure**:
-  - 股票名称与代码
-  - 当前价格与状态
-  - 时间背景: %s
-  - **核心逻辑分析**:
-    - 🏛️ 政策与宏观 (天时) - 包含板块效应分析
-    - 💰 资金与筹码 (地利) - 包含龙虎榜游资分析
-    - 🗣️ 情绪与心理 (人和) - 包含个股热度与联动
-  - **风控评估 (风控)**: 监管与波动率检查
-  - **走势预测 (%s)**: [趋势] - [理由]
-  - 置信度评分: [0-1]
-  - 关键驱动因素
-
-IMPORTANT: After the detailed analysis, you MUST output a metadata block separated by "---METADATA---".
-The metadata block MUST be a valid JSON object with the following fields:
-- "confidence": (float) The same confidence score as in the analysis (0.0 to 1.0).
-- "news_summary": (string) A concise summary of the most important news/events driving the prediction (max 50 words).
-
-Example Output:
-Final Answer:
-... (Analysis Text) ...
-
----METADATA---
-{"confidence": 0.85, "news_summary": "Policy support for low-altitude economy and 5G drives positive outlook despite short-term selling pressure."}
-
-Output your final answer starting with "Final Answer:", followed by the detailed analysis in Chinese, and then the metadata block.
-`, stockCode, time.Now().Format("2006-01-02 15:04:05"), tradingStatusStr, stockData, analysisData, marketInfo, sectorContext, dtContext, fractalAnalysisContext, timeContextInstruction, predictionFocus, tradingStatusStr, predictionFocus)
-
-	res, err := chains.Run(ctx, executor, input)
-	if err != nil {
-		// Fallback: If LangChain fails to parse the output but the model actually returned the content
-		// (common with "unable to parse agent output" error), we try to extract it.
-		if strings.Contains(err.Error(), "unable to parse agent output") {
-			log.Printf("LangChain parse error, attempting to recover content from error message")
-			// The error message format is usually: "unable to parse agent output: <actual_output>"
-			prefix := "unable to parse agent output: "
-			errMsg := err.Error()
-			if idx := strings.Index(errMsg, prefix); idx != -1 {
-				res = errMsg[idx+len(prefix):]
-				// Proceed to parsing
-			} else {
-				return "", 0, "", err
-			}
-		} else {
-			return "", 0, "", err
-		}
+	// 获取用户提示词
+	userPromptTemplate := prompt.GetManager().GetPrompt(ctx, prompt.StockPredictionUser)
+	if userPromptTemplate == "" {
+		return "", 0, "", "", fmt.Errorf("获取预测用户提示词失败")
 	}
 
-	// Parse Output
+	// 格式化用户提示词
+	// 占位符: stockCode, time, time, stockData, analysisData, marketInfo, sectorContext, dtContext, fractal
+	userPrompt := fmt.Sprintf(userPromptTemplate,
+		stockCode,
+		time.Now().Format("2006-01-02 15:04:05"),
+		tradingStatusStr,
+		stockData,
+		analysisData,
+		marketInfo,
+		sectorContext,
+		dtContext,
+		fractalAnalysisContext,
+	)
+
+	messages := []llms.MessageContent{
+		{
+			Role:  llms.ChatMessageTypeSystem,
+			Parts: []llms.ContentPart{llms.TextContent{Text: systemPrompt}},
+		},
+		{
+			Role:  llms.ChatMessageTypeHuman,
+			Parts: []llms.ContentPart{llms.TextContent{Text: userPrompt}},
+		},
+	}
+
+	// 5. 运行 LLM
+	resp, err := llm.GenerateContent(ctx, messages)
+	if err != nil {
+		return "", 0, "", "", fmt.Errorf("llm 生成失败: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return "", 0, "", "", fmt.Errorf("llm 响应为空")
+	}
+	res := resp.Choices[0].Content
+
+	// 解析输出
 	analysis := res
-	confidence := 0.5 // Default
-	newsSummary := "See analysis for details"
+	confidence := 0.5 // 默认值
+	newsSummary := "详见分析"
 
 	parts := strings.Split(res, "---METADATA---")
 	var metadataMap map[string]interface{}
@@ -290,7 +276,7 @@ Output your final answer starting with "Final Answer:", followed by the detailed
 	if len(parts) > 1 {
 		analysis = strings.TrimSpace(parts[0])
 		metadataJSON := strings.TrimSpace(parts[1])
-		// Clean JSON (remove potential markdown code blocks)
+		// 清理 JSON (移除可能的 markdown 代码块)
 		metadataJSON = strings.TrimPrefix(metadataJSON, "```json")
 		metadataJSON = strings.TrimPrefix(metadataJSON, "```")
 		metadataJSON = strings.TrimSuffix(metadataJSON, "```")
@@ -304,31 +290,32 @@ Output your final answer starting with "Final Answer:", followed by the detailed
 			confidence = metadata.Confidence
 			newsSummary = metadata.NewsSummary
 
-			// For Langfuse
+			// 用于 Langfuse
 			metadataMap = map[string]interface{}{
 				"confidence":   confidence,
 				"news_summary": newsSummary,
 			}
 		} else {
-			log.Printf("Failed to parse metadata JSON: %v. JSON: %s", err, metadataJSON)
+			log.Printf("解析元数据 JSON 失败: %v. JSON: %s", err, metadataJSON)
 		}
 	} else {
-		log.Printf("Metadata separator not found in response")
+		log.Printf("响应中未找到元数据分隔符")
 	}
 
-	// Trace with Langfuse
-	if lf := GetLangfuse(); lf != nil {
-		lf.TracePrediction(ctx, stockCode, input, analysis, metadataMap)
+	// 使用 Langfuse 追踪
+	if lf != nil {
+		lf.CreateGeneration(ctx, traceID, "LLM-Predict", cfg.ModelName, userPrompt, analysis, metadataMap, time.Now(), time.Now())
+		lf.UpdateTrace(ctx, traceID, userPrompt, analysis)
 	}
 
-	return analysis, confidence, newsSummary, nil
+	return analysis, confidence, newsSummary, traceID, nil
 }
 
 func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte, modelName string) ([]*ai.RecognizedStock, error) {
-	// 1. Determine ModelConfig
+	// 1. 确定模型配置
 	var cfg ModelConfig
 	if p.fileConfig != nil {
-		// Find config by model name in all providers
+		// 在所有提供商中查找模型配置
 		found := false
 		if modelName != "" {
 			for provider, c := range p.fileConfig.Models {
@@ -347,68 +334,58 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 			if ok {
 				cfg.Provider = p.fileConfig.CurrentProvider
 			} else {
-				// cfg = ModelConfig{Provider: ProviderFake}
-				return nil, fmt.Errorf("provider not found and fake provider disabled")
+				return nil, fmt.Errorf("未找到提供商且禁用了 fake 提供商")
 			}
 		}
 	} else {
-		// cfg = ModelConfig{Provider: ProviderFake}
-		return nil, fmt.Errorf("no config found and fake provider disabled")
+		return nil, fmt.Errorf("未找到配置且禁用了 fake 提供商")
 	}
 
-	log.Printf("Using LLM Provider for Image Recognition: %s, Model: %s", cfg.Provider, cfg.ModelName)
+	log.Printf("使用 LLM 提供商进行图像识别: %s, 模型: %s", cfg.Provider, cfg.ModelName)
 
-	// 2. Create LLM
+	// 2. 创建 LLM
 	llmClient, err := NewModel(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create llm: %w", err)
+		return nil, fmt.Errorf("创建 llm 失败: %w", err)
 	}
 
-	// 3. Prepare Image
-	// Detect content type
+	// 3. 准备图像
+	// 检测内容类型
 	mimeType := http.DetectContentType(imageData)
 	base64Image := base64.StdEncoding.EncodeToString(imageData)
 	imageURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Image)
 
-	// 4. Create Message
-	prompt := `请识别这张图片中的股票市场信息。
-如果发现股票代码和名称，请列出它们。
-重点关注A股（上海/深圳）。
-如果图片包含股票列表，请提取所有股票。
-如果图片是某只股票的走势图，请提取该股票。
-
-仅返回一个包含 "code" 和 "name" 字段的 JSON 对象数组。
-确保响应是方括号 [] 括起来的有效 JSON 数组。
-不要在 JSON 数组前后添加任何文本。
-示例：[{"code": "sh600519", "name": "贵州茅台"}, {"code": "sz000001", "name": "平安银行"}]
-如果未找到股票，则返回空数组 []。
-不要包含任何 markdown 格式（如 ` + "```json" + `）。只返回原始 JSON 字符串。`
+	// 4. 创建消息
+	promptStr := prompt.GetManager().GetPrompt(ctx, prompt.ImageRecognitionMaster)
+	if promptStr == "" {
+		return nil, fmt.Errorf("获取图像识别提示词失败")
+	}
 
 	messages := []llms.MessageContent{
 		{
 			Role: llms.ChatMessageTypeHuman,
 			Parts: []llms.ContentPart{
-				llms.TextContent{Text: prompt},
+				llms.TextContent{Text: promptStr},
 				llms.ImageURLContent{URL: imageURL},
 			},
 		},
 	}
 
-	// 5. Generate Content
+	// 5. 生成内容
 	resp, err := llmClient.GenerateContent(ctx, messages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate content: %w", err)
+		return nil, fmt.Errorf("生成内容失败: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no content generated")
+		return nil, fmt.Errorf("未生成内容")
 	}
 
 	content := resp.Choices[0].Content
-	log.Printf("Raw LLM Response: %s", content)
+	log.Printf("LLM 原始响应: %s", content)
 
-	// 6. Parse JSON
-	// Clean up potential markdown code blocks if the model ignored instructions
+	// 6. 解析 JSON
+	// 清理可能的 markdown 代码块
 	content = strings.TrimSpace(content)
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
@@ -416,16 +393,16 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 	content = strings.TrimSpace(content)
 
 	var stocks []*ai.RecognizedStock
-	// Use a temporary struct for unmarshalling to handle potential field mismatch
+	// 使用临时结构体解析以处理可能的字段不匹配
 	var tempStocks []struct {
 		Code string `json:"code"`
 		Name string `json:"name"`
 	}
 
 	if err := json.Unmarshal([]byte(content), &tempStocks); err != nil {
-		// Try to use regex if JSON parsing fails
-		log.Printf("JSON unmarshal failed: %v, trying regex", err)
-		// Simple regex to find codes like sh/sz + 6 digits OR just 6 digits
+		// 如果 JSON 解析失败，尝试使用正则
+		log.Printf("JSON 解析失败: %v, 尝试使用正则", err)
+		// 简单正则匹配 sh/sz + 6位数字 或 纯6位数字
 		re := regexp.MustCompile(`((sh|sz)\d{6})|(\d{6})`)
 		matches := re.FindAllString(content, -1)
 
@@ -433,43 +410,42 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 
 		for _, match := range matches {
 			code := match
-			// Fix stock code prefix if missing
+			// 如果缺少前缀则修复
 			if len(code) == 6 && !strings.HasPrefix(code, "sh") && !strings.HasPrefix(code, "sz") {
 				if strings.HasPrefix(code, "6") {
 					code = "sh" + code
 				} else if strings.HasPrefix(code, "0") || strings.HasPrefix(code, "3") {
 					code = "sz" + code
 				}
-				// Other cases ignored
+				// 忽略其他情况
 			}
 
-			// Avoid duplicates and ensure valid format
+			// 避免重复并确保格式有效
 			if !uniqueCodes[code] && (strings.HasPrefix(code, "sh") || strings.HasPrefix(code, "sz")) {
 				uniqueCodes[code] = true
 				stocks = append(stocks, &ai.RecognizedStock{
 					Code: code,
-					Name: "Unknown", // Cannot reliably extract name via regex without structure
+					Name: "未知", // 无法通过正则可靠提取名称
 				})
 			}
 		}
 
 		if len(stocks) == 0 {
-			// Only return error if regex also failed to find anything
-			// Return empty list instead of error to avoid 500
-			log.Printf("Failed to parse stock info from image (JSON & Regex failed): %v", err)
+			// 如果正则也未找到任何内容，返回空列表而不是错误
+			log.Printf("从图像解析股票信息失败 (JSON 和正则均失败): %v", err)
 			return []*ai.RecognizedStock{}, nil
 		}
 	} else {
 		for _, s := range tempStocks {
 			code := s.Code
-			// Fix stock code prefix if missing
+			// 如果缺少前缀则修复
 			if len(code) == 6 && !strings.HasPrefix(code, "sh") && !strings.HasPrefix(code, "sz") {
 				if strings.HasPrefix(code, "6") {
 					code = "sh" + code
 				} else if strings.HasPrefix(code, "0") || strings.HasPrefix(code, "3") {
 					code = "sz" + code
 				}
-				// Other cases (e.g. 4, 8) might be Beijing stock exchange or others, ignore for now or default
+				// 忽略其他情况
 			}
 
 			stocks = append(stocks, &ai.RecognizedStock{
@@ -483,8 +459,8 @@ func (p *LangChainProvider) RecognizeImage(ctx context.Context, imageData []byte
 }
 
 func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, dragonTigerList []*stock.DragonTigerItem, date string) (*ai.MarketReviewResponse, error) {
-	// ... (Implementation for MarketReview - Focus on Today's Summary)
-	// 1. Determine ModelConfig
+	// ... (市场复盘实现 - 关注今日总结)
+	// 1. 确定模型配置
 	var cfg ModelConfig
 	if p.fileConfig != nil {
 		var ok bool
@@ -492,33 +468,33 @@ func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.S
 		if ok {
 			cfg.Provider = p.fileConfig.CurrentProvider
 		} else {
-			return nil, fmt.Errorf("provider not found")
+			return nil, fmt.Errorf("未找到提供商")
 		}
 	} else {
-		return nil, fmt.Errorf("no config found")
+		return nil, fmt.Errorf("未找到配置")
 	}
 
-	log.Printf("Using LLM Provider for Market Review: %s, Model: %s", cfg.Provider, cfg.ModelName)
+	log.Printf("使用 LLM 提供商进行市场复盘: %s, 模型: %s", cfg.Provider, cfg.ModelName)
 
-	// 2. Create LLM
+	// 2. 创建 LLM
 	llmClient, err := NewModel(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create llm: %w", err)
+		return nil, fmt.Errorf("创建 llm 失败: %w", err)
 	}
 
-	// 3. Prepare Data Context
+	// 3. 准备数据上下文
 	var sectorSummary strings.Builder
-	sectorSummary.WriteString("Top Sectors:\n")
+	sectorSummary.WriteString("热门板块:\n")
 	for i, s := range sectors {
-		if i >= 10 { // Top 10
+		if i >= 10 { // 前10
 			break
 		}
-		sectorSummary.WriteString(fmt.Sprintf("- %s: +%.2f%% (Net Inflow: %.2f), Top Stock: %s\n", s.Name, s.ChangePercent, s.NetInflow, s.TopStockName))
+		sectorSummary.WriteString(fmt.Sprintf("- %s: +%.2f%% (净流入: %.2f), 领涨股: %s\n", s.Name, s.ChangePercent, s.NetInflow, s.TopStockName))
 	}
 
 	var limitUpSummary strings.Builder
-	limitUpSummary.WriteString(fmt.Sprintf("Limit Up Pool (Total: %d):\n", len(limitUps)))
-	// Simple stats
+	limitUpSummary.WriteString(fmt.Sprintf("涨停池 (共: %d):\n", len(limitUps)))
+	// 简单统计
 	typeCount := make(map[string]int)
 	for _, s := range limitUps {
 		typeCount[s.LimitUpType]++
@@ -526,15 +502,15 @@ func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.S
 	}
 
 	var dtSummary strings.Builder
-	dtSummary.WriteString(fmt.Sprintf("Dragon Tiger List (Top 5 Net Buy):\n"))
+	dtSummary.WriteString(fmt.Sprintf("龙虎榜 (净买入前5):\n"))
 	for i, item := range dragonTigerList {
 		if i >= 5 {
 			break
 		}
-		dtSummary.WriteString(fmt.Sprintf("- %s: +%.2f%%, Net: %.1f Wan, Reason: %s\n", item.Name, item.ChangePercent, item.NetInflow/10000, item.Reason))
-		// Add seats if available (Top 3)
+		dtSummary.WriteString(fmt.Sprintf("- %s: +%.2f%%, 净额: %.1f 万, 原因: %s\n", item.Name, item.ChangePercent, item.NetInflow/10000, item.Reason))
+		// 添加席位 (前3)
 		if len(item.BuySeats) > 0 {
-			dtSummary.WriteString("  [Buy Seats]: ")
+			dtSummary.WriteString("  [买入席位]: ")
 			for k, seat := range item.BuySeats {
 				if k >= 2 {
 					break
@@ -545,70 +521,35 @@ func (p *LangChainProvider) ReviewMarket(ctx context.Context, sectors []*stock.S
 		}
 	}
 
-	// 4. Create Prompt (Focus on Review/Summary)
-	prompt := fmt.Sprintf(`You are an expert Stock Market Analyst.
-Your task is to provide a comprehensive "Market Review" (复盘) for the A-share market on %s.
-
-Here is the market data:
-
-[Sector Performance]
-%s
-
-[Limit-Up (Sentiment) Data]
-%s
-
-[Dragon Tiger List (Hot Money)]
-%s
-
-Please analyze the data and generate a structured review in Chinese (Simplified).
-
-IMPORTANT: The provided data (Limit-Up, Dragon Tiger) might be empty if the market is closed or API fails.
-If any data section is empty, explicitly state that "No sufficient data available" for that part, and DO NOT HALLUCINATE or invent stock names.
-If Limit-Up Data is empty, do not list any "Hot Stocks" unless they are from the Dragon Tiger List or Sectors.
-If NO data is available at all, return a summary stating that market data is unavailable.
-
-Structure:
-1. **Market Summary (市场总览)**: A brief summary of today's market emotion and main themes.
-2. **Sector Analysis (板块分析)**: Which sectors are strong? Is there a clear main line? Where is the money flowing?
-3. **Sentiment Analysis (情绪分析)**: Analyze the limit-up pool. Is the sentiment heating up or cooling down? Are there high-space stocks (连板高度)?
-4. **Hot Money Analysis (游资动向)**: Based on Dragon Tiger List, where are the active funds?
-5. **Risks (风险提示)**: Any potential risks based on the data?
-6. **Opportunities (明日机会)**: Based on today's rotation, what to look for tomorrow?
-
-Output ONLY a JSON object with the following fields:
-{
-  "summary": "...",
-  "sector_analysis": "...",
-  "sentiment_analysis": "...",
-  "key_risks": ["risk1", "risk2"],
-  "opportunities": ["opp1", "opp2"]
-}
-
-Ensure the response is valid JSON. Do not include markdown formatting like `+"```json"+`.
-`, date, sectorSummary.String(), limitUpSummary.String(), dtSummary.String())
+	// 4. 创建提示词 (关注复盘/总结)
+	promptTemplate := prompt.GetManager().GetPrompt(ctx, prompt.MarketReviewMaster)
+	if promptTemplate == "" {
+		return nil, fmt.Errorf("获取市场复盘提示词失败")
+	}
+	promptStr := fmt.Sprintf(promptTemplate, date, sectorSummary.String(), limitUpSummary.String(), dtSummary.String())
 
 	messages := []llms.MessageContent{
 		{
 			Role: llms.ChatMessageTypeHuman,
 			Parts: []llms.ContentPart{
-				llms.TextContent{Text: prompt},
+				llms.TextContent{Text: promptStr},
 			},
 		},
 	}
 
-	// 5. Generate
+	// 5. 生成
 	resp, err := llmClient.GenerateContent(ctx, messages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate review: %w", err)
+		return nil, fmt.Errorf("生成复盘失败: %w", err)
 	}
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no content generated")
+		return nil, fmt.Errorf("未生成内容")
 	}
 
 	content := resp.Choices[0].Content
-	log.Printf("Raw Review Response: %s", content)
+	log.Printf("原始复盘响应: %s", content)
 
-	// 6. Parse JSON
+	// 6. 解析 JSON
 	content = strings.TrimSpace(content)
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
@@ -617,8 +558,8 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 
 	var review ai.MarketReviewResponse
 	if err := json.Unmarshal([]byte(content), &review); err != nil {
-		log.Printf("Failed to parse review JSON: %v. Raw: %s", err, content)
-		// Fallback: put everything in summary
+		log.Printf("解析复盘 JSON 失败: %v. 原始内容: %s", err, content)
+		// 回退: 将所有内容放入 summary
 		return &ai.MarketReviewResponse{
 			Summary: content,
 		}, nil
@@ -628,7 +569,7 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 }
 
 func (p *LangChainProvider) AnalyzeMarket(ctx context.Context, sectors []*stock.SectorInfo, limitUps []*stock.LimitUpStock, dragonTigerList []*stock.DragonTigerItem, date string) (*ai.MarketAnalysisResponse, error) {
-	// 1. Determine ModelConfig
+	// 1. 确定模型配置
 	var cfg ModelConfig
 	if p.fileConfig != nil {
 		var ok bool
@@ -636,32 +577,32 @@ func (p *LangChainProvider) AnalyzeMarket(ctx context.Context, sectors []*stock.
 		if ok {
 			cfg.Provider = p.fileConfig.CurrentProvider
 		} else {
-			return nil, fmt.Errorf("provider not found")
+			return nil, fmt.Errorf("未找到提供商")
 		}
 	} else {
-		return nil, fmt.Errorf("no config found")
+		return nil, fmt.Errorf("未找到配置")
 	}
 
-	log.Printf("Using LLM Provider for Market Analysis: %s, Model: %s", cfg.Provider, cfg.ModelName)
+	log.Printf("使用 LLM 提供商进行市场分析: %s, 模型: %s", cfg.Provider, cfg.ModelName)
 
-	// 2. Create LLM
+	// 2. 创建 LLM
 	llmClient, err := NewModel(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create llm: %w", err)
+		return nil, fmt.Errorf("创建 llm 失败: %w", err)
 	}
 
-	// 3. Prepare Data Context (Reuse same context logic as ReviewMarket)
+	// 3. 准备数据上下文 (复用 ReviewMarket 的逻辑)
 	var sectorSummary strings.Builder
-	sectorSummary.WriteString("Top Sectors:\n")
+	sectorSummary.WriteString("热门板块:\n")
 	for i, s := range sectors {
 		if i >= 10 {
 			break
 		}
-		sectorSummary.WriteString(fmt.Sprintf("- %s: +%.2f%% (Net Inflow: %.2f), Top Stock: %s\n", s.Name, s.ChangePercent, s.NetInflow, s.TopStockName))
+		sectorSummary.WriteString(fmt.Sprintf("- %s: +%.2f%% (净流入: %.2f), 领涨股: %s\n", s.Name, s.ChangePercent, s.NetInflow, s.TopStockName))
 	}
 
 	var limitUpSummary strings.Builder
-	limitUpSummary.WriteString(fmt.Sprintf("Limit Up Pool (Total: %d):\n", len(limitUps)))
+	limitUpSummary.WriteString(fmt.Sprintf("涨停池 (共: %d):\n", len(limitUps)))
 	typeCount := make(map[string]int)
 	for _, s := range limitUps {
 		typeCount[s.LimitUpType]++
@@ -669,82 +610,43 @@ func (p *LangChainProvider) AnalyzeMarket(ctx context.Context, sectors []*stock.
 	}
 
 	var dtSummary strings.Builder
-	dtSummary.WriteString(fmt.Sprintf("Dragon Tiger List (Top 5 Net Buy):\n"))
+	dtSummary.WriteString(fmt.Sprintf("龙虎榜 (净买入前5):\n"))
 	for i, item := range dragonTigerList {
 		if i >= 5 {
 			break
 		}
-		dtSummary.WriteString(fmt.Sprintf("- %s: +%.2f%%, Net: %.1f Wan, Reason: %s\n", item.Name, item.ChangePercent, item.NetInflow/10000, item.Reason))
+		dtSummary.WriteString(fmt.Sprintf("- %s: +%.2f%%, 净额: %.1f 万, 原因: %s\n", item.Name, item.ChangePercent, item.NetInflow/10000, item.Reason))
 	}
 
-	// 4. Create Prompt (Focus on Prediction/Opportunity/Risk)
-	prompt := fmt.Sprintf(`You are an expert Stock Market Analyst.
-Your task is to provide a "Pre-market Analysis" (盘前分析) for the A-share market, based on the provided data.
-
-Here is the latest available market data (representing the most recent trading session, usually yesterday or last Friday):
-
-[Sector Performance]
-%s
-
-[Limit-Up (Sentiment) Data]
-%s
-
-[Dragon Tiger List (Hot Money)]
-%s
-
-Please analyze the data and generate a structured analysis focused on OPPORTUNITIES and RISKS for the NEXT trading day (the upcoming opening).
-Do not limit your analysis to describing the past; use the data to PREDICT the future trend.
-
-IMPORTANT: The provided data (Limit-Up, Dragon Tiger) might be empty if the market is closed or API fails.
-If any data section is empty, explicitly state that "No sufficient data available" for that part, and DO NOT HALLUCINATE or invent stock names.
-If Limit-Up Data is empty, do not list any "Hot Stocks" unless they are from the Dragon Tiger List or Sectors.
-If NO data is available at all, return a summary stating that market data is unavailable.
-
-Structure:
-1. **Hot Stocks (热门股票)**: Identify 3-5 stocks that are likely to be active tomorrow based on limit-up momentum or dragon tiger list funds.
-2. **Recommended Stocks (推荐关注)**: Recommend 1-3 stocks with strong logic (e.g., sector resonance, hot money inflow). Provide brief reasons.
-3. **Risks (风险提示)**: What should traders watch out for in the next session? (e.g., high-level divergence, sector rotation failure).
-4. **Opportunities (机会展望)**: Which sectors or themes might lead tomorrow?
-5. **Analysis Summary (分析总结)**: A concise overview of the strategy for tomorrow.
-6. **Policy Impact Score (政策影响评分)**: Rate the current policy environment's impact on the market from -5 (Negative) to +5 (Positive).
-   - Consider sector policies, regulatory tone, and macro news.
-   - 0 is neutral.
-
-Output ONLY a JSON object with the following fields:
-{
-  "hot_stocks": ["stock1", "stock2"],
-  "recommended_stocks": ["stock1 (Reason)", "stock2 (Reason)"],
-  "risks": ["risk1", "risk2"],
-  "opportunities": ["opp1", "opp2"],
-  "analysis_summary": "...",
-  "policy_score": 2.5
-}
-
-Ensure the response is valid JSON. Do not include markdown formatting like `+"```json"+`.
-`, sectorSummary.String(), limitUpSummary.String(), dtSummary.String())
+	// 4. 创建提示词 (关注预测/机会/风险)
+	promptTemplate := prompt.GetManager().GetPrompt(ctx, prompt.MarketAnalysisMaster)
+	if promptTemplate == "" {
+		return nil, fmt.Errorf("获取市场分析提示词失败")
+	}
+	promptStr := fmt.Sprintf(promptTemplate, sectorSummary.String(), limitUpSummary.String(), dtSummary.String())
 
 	messages := []llms.MessageContent{
 		{
 			Role: llms.ChatMessageTypeHuman,
 			Parts: []llms.ContentPart{
-				llms.TextContent{Text: prompt},
+				llms.TextContent{Text: promptStr},
 			},
 		},
 	}
 
-	// 5. Generate
+	// 5. 生成
 	resp, err := llmClient.GenerateContent(ctx, messages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate analysis: %w", err)
+		return nil, fmt.Errorf("生成分析失败: %w", err)
 	}
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no content generated")
+		return nil, fmt.Errorf("未生成内容")
 	}
 
 	content := resp.Choices[0].Content
-	log.Printf("Raw Analysis Response: %s", content)
+	log.Printf("原始分析响应: %s", content)
 
-	// 6. Parse JSON
+	// 6. 解析 JSON
 	content = strings.TrimSpace(content)
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
@@ -752,27 +654,57 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 	content = strings.TrimSpace(content)
 
 	var analysis ai.MarketAnalysisResponse
-	if err := json.Unmarshal([]byte(content), &analysis); err != nil {
-		log.Printf("Failed to parse analysis JSON: %v. Raw: %s", err, content)
+
+	// 定义临时结构体以匹配新提示词 JSON 结构但映射到旧 IDL 以兼容
+	type MarketAnalysisTemp struct {
+		HotSectors        []string `json:"hot_sectors"`
+		RecommendedStocks []struct {
+			Code   string `json:"code"`
+			Name   string `json:"name"`
+			Reason string `json:"reason"`
+		} `json:"recommended_stocks"`
+		Risks           []string `json:"risks"`
+		Opportunities   []string `json:"opportunities"`
+		AnalysisSummary string   `json:"analysis_summary"`
+		PolicyScore     float64  `json:"policy_score"`
+	}
+
+	var tempAnalysis MarketAnalysisTemp
+	if err := json.Unmarshal([]byte(content), &tempAnalysis); err != nil {
+		log.Printf("解析分析 JSON 失败: %v. 原始内容: %s", err, content)
 		return &ai.MarketAnalysisResponse{
 			AnalysisSummary: content,
 		}, nil
 	}
 
-	// 7. Calculate Sentiment Score (Deterministic)
-	// Base: 50
-	// Factor 1: Limit Up Count (0-30 -> 0-30 pts)
-	// Factor 2: Broken Limit Up (Negative impact)
-	// Factor 3: Net Inflow (Top Sectors)
+	// 映射临时结构体到 IDL 结构体
+	analysis.HotStocks = tempAnalysis.HotSectors
+
+	var recStocks []string
+	for _, s := range tempAnalysis.RecommendedStocks {
+		recStocks = append(recStocks, fmt.Sprintf("%s (%s): %s", s.Name, s.Code, s.Reason))
+	}
+	analysis.RecommendedStocks = recStocks
+
+	analysis.Risks = tempAnalysis.Risks
+	analysis.Opportunities = tempAnalysis.Opportunities
+	analysis.AnalysisSummary = tempAnalysis.AnalysisSummary
+	analysis.PolicyScore = tempAnalysis.PolicyScore
+
+	// 7. 计算情绪得分 (确定性算法)
+	// 基准: 50
+	// 因子 1: 涨停数 (0-30 -> 0-30 分)
+	// 因子 2: 炸板 (负面影响)
+	// 因子 3: 净流入 (热门板块)
 
 	sentimentScore := 50.0
 	limitUpCount := float64(len(limitUps))
 	if limitUpCount > 60 {
 		limitUpCount = 60
-	} // Cap
+	} // 上限
 	sentimentScore += limitUpCount * 0.5
 
-	// Check broken limit ups
+	// 检查炸板
 	brokenCount := 0
 	for _, s := range limitUps {
 		if s.IsBroken {
@@ -781,7 +713,7 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 	}
 	sentimentScore -= float64(brokenCount) * 1.0
 
-	// Sector Inflow (Sum of Top 5)
+	// 板块流入 (前5总和)
 	inflowSum := 0.0
 	for i, s := range sectors {
 		if i >= 5 {
@@ -789,10 +721,10 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 		}
 		inflowSum += s.NetInflow
 	}
-	// Normalize inflow (e.g., 100M -> 1 pt, max 10 pts)
-	// Assuming unit is Wan (10000), so 10000 Wan = 1 Yi.
-	// Let's say 50 Yi inflow is very good.
-	// 50 Yi = 500,000 Wan.
+	// 归一化流入 (例如, 1亿 -> 1分, 最大 10分)
+	// 假设单位是万, 所以 10000万 = 1亿.
+	// 假设 50亿流入非常好.
+	// 50亿 = 500,000万.
 	inflowScore := inflowSum / 50000.0
 	if inflowScore > 10 {
 		inflowScore = 10
@@ -802,7 +734,7 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 	}
 	sentimentScore += inflowScore
 
-	// Clamp 0-100
+	// 限制 0-100
 	if sentimentScore > 100 {
 		sentimentScore = 100
 	}
@@ -812,47 +744,95 @@ Ensure the response is valid JSON. Do not include markdown formatting like `+"``
 
 	analysis.SentimentScore = sentimentScore
 
+	// 8. 自动追踪推荐股票
+	// 为每只推荐股票触发预测生成
+	go func() {
+		stocks := tempAnalysis.RecommendedStocks
+		for _, s := range stocks {
+			// 使用带超时的 detached context
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			name, code := s.Name, s.Code
+
+			log.Printf("[自动追踪] 为推荐股票生成预测: %s (%s)", name, code)
+			analysis, confidence, _, traceID, err := p.Predict(ctx, code, 3, "glm-4.6v-flash") // 使用智谱模型
+			if err != nil {
+				log.Printf("[自动追踪] 生成预测失败 %s: %v", code, err)
+				continue
+			}
+
+			// 保存到数据库
+			trend := "中性"
+			if strings.Contains(analysis, "看涨") || strings.Contains(analysis, "Up") {
+				trend = "看涨"
+			} else if strings.Contains(analysis, "看跌") || strings.Contains(analysis, "Down") {
+				trend = "看跌"
+			}
+
+			saveReq := &stock.SavePredictionRequest{
+				Record: &stock.PredictionRecord{
+					Id:             fmt.Sprintf("auto-%d-%s", time.Now().Unix(), code), // 简单ID
+					StockCode:      code,
+					PredictionDate: time.Now().Format("2006-01-02 15:04:05"),
+					Content:        analysis,
+					Confidence:     confidence,
+					Trend:          trend,
+					TraceId:        traceID,
+				},
+			}
+
+			_, saveErr := p.stockClient.SavePrediction(ctx, saveReq)
+			if saveErr != nil {
+				log.Printf("[自动追踪] 保存预测失败 %s: %v", code, saveErr)
+			} else {
+				log.Printf("[自动追踪] 成功追踪 %s", code)
+			}
+			time.Sleep(time.Duration(1000) * time.Millisecond)
+		}
+	}()
+
 	return &analysis, nil
 }
 
 func (p *LangChainProvider) predictWithFractal(ctx context.Context, stockCode string, days int32) (string, float64, string, error) {
-	// 1. Fetch Historical Klines (e.g. 500 days)
+	// 1. 获取历史 K 线 (例如 500 天)
 	req := &stock.GetHistoricalKlineRequest{
 		StockCode: stockCode,
-		Days:      500, // Enough history for matching
+		Days:      500, // 足够的历史用于匹配
 	}
 	resp, err := p.stockClient.GetHistoricalKline(ctx, req)
 	if err != nil {
-		return "", 0, "", fmt.Errorf("failed to fetch klines: %v", err)
+		return "", 0, "", fmt.Errorf("获取K线失败: %v", err)
 	}
 
 	klines := resp.Klines
-	if len(klines) < 60 { // Need at least some history + query pattern
-		return "Insufficient historical data for fractal analysis.", 0, "", nil
+	if len(klines) < 60 { // 需要至少一些历史 + 查询模式
+		return "历史数据不足，无法进行分形分析。", 0, "", nil
 	}
 
-	// 2. Prepare Data
-	// We use Close price for matching
+	// 2. 准备数据
+	// 使用收盘价进行匹配
 	closes := make([]float64, len(klines))
 	for i, k := range klines {
 		closes[i] = k.Close
 	}
 
-	// 3. Define Query Pattern (Last 20 days)
+	// 3. 定义查询模式 (最近 20 天)
 	queryLen := 20
 	if len(closes) < queryLen*2 {
-		return "History too short for pattern matching.", 0, "", nil
+		return "历史太短，无法进行模式匹配。", 0, "", nil
 	}
 
 	queryPattern := closes[len(closes)-queryLen:]
-	searchSpace := closes[:len(closes)-queryLen] // Search in the past, excluding current pattern
+	searchSpace := closes[:len(closes)-queryLen] // 在过去搜索，排除当前模式
 
-	// 4. Perform Matching (Pearson Correlation)
+	// 4. 执行匹配 (皮尔逊相关系数)
 	bestSim := -1.0
 	var bestMatch []float64
 	var bestMatchIdx int
 
-	// Normalize query
+	// 归一化查询
 	normQuery := fractal.NormalizeSeries(queryPattern)
 
 	for i := 0; i <= len(searchSpace)-queryLen-int(days); i++ {
@@ -863,18 +843,18 @@ func (p *LangChainProvider) predictWithFractal(ctx context.Context, stockCode st
 		if sim > bestSim {
 			bestSim = sim
 			bestMatchIdx = i
-			// Get the NEXT 'days' prices after the match
+			// 获取匹配后的未来 'days' 天价格
 			bestMatch = searchSpace[i+queryLen : i+queryLen+int(days)]
 		}
 	}
 
 	if bestMatch == nil {
-		return "No similar pattern found in history.", 0, "", nil
+		return "历史中未找到相似模式。", 0, "", nil
 	}
 
-	// 5. Generate Projection
-	// Calculate the percentage change of the best match's future
-	// and apply it to the current price.
+	// 5. 生成推演
+	// 计算最佳匹配未来的百分比变化
+	// 并将其应用于当前价格。
 	currentPrice := closes[len(closes)-1]
 	projection := make([]float64, len(bestMatch))
 
@@ -882,7 +862,7 @@ func (p *LangChainProvider) predictWithFractal(ctx context.Context, stockCode st
 
 	var analysisBuilder strings.Builder
 	analysisBuilder.WriteString(fmt.Sprintf("发现分形模式匹配 (相似度: %.2f%%)\n", bestSim*100))
-	analysisBuilder.WriteString(fmt.Sprintf("匹配历史时段: %s\n", klines[bestMatchIdx].Date)) // Approximate date
+	analysisBuilder.WriteString(fmt.Sprintf("匹配历史时段: %s\n", klines[bestMatchIdx].Date)) // 近似日期
 	analysisBuilder.WriteString("走势推演:\n")
 
 	for i, price := range bestMatch {
@@ -903,17 +883,17 @@ func (p *LangChainProvider) predictWithFractal(ctx context.Context, stockCode st
 
 	finalAnalysis := fmt.Sprintf("基于分形几何学分析，当前20日K线形态与 %s 开始的历史走势有 %.0f%% 的相似度。\n\n趋势预测: %s\n\n%s", klines[bestMatchIdx].Date, bestSim*100, trend, analysisBuilder.String())
 
-	// Prepare fractal data for chart
+	// 准备图表的分形数据
 	fractalData := map[string]interface{}{
 		"query":      queryPattern,
 		"match":      bestMatch,
 		"projection": projection,
 		"match_date": klines[bestMatchIdx].Date,
-		"dates":      make([]string, len(queryPattern)+len(projection)), // Placeholder for dates if needed
+		"dates":      make([]string, len(queryPattern)+len(projection)), // 需要时填充日期占位符
 	}
 	fractalDataJSON, _ := json.Marshal(fractalData)
 
-	// Format metadata
+	// 格式化元数据
 	metadata := fmt.Sprintf(`---METADATA---
 {"confidence": %.2f, "news_summary": "基于历史分形自相似性的技术分析。", "fractal_data": %s}`, bestSim, string(fractalDataJSON))
 
