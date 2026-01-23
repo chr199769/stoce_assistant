@@ -497,15 +497,17 @@ func (s *StockServiceImpl) SavePrediction(ctx context.Context, req *stock.SavePr
 	}
 
 	record := model.PredictionRecord{
-		ID:             req.Record.Id,
-		StockCode:      req.Record.StockCode,
-		PredictionDate: predDate,
-		Content:        req.Record.Content,
-		Confidence:     req.Record.Confidence,
-		Trend:          req.Record.Trend,
-		TargetPrice:    req.Record.TargetPrice,
-		StopLossPrice:  req.Record.StopLossPrice,
-		TraceID:        req.Record.TraceId,
+		ID:                req.Record.Id,
+		StockCode:         req.Record.StockCode,
+		PredictionDate:    predDate,
+		Content:           req.Record.Content,
+		Confidence:        req.Record.Confidence,
+		Trend:             req.Record.Trend,
+		TargetPrice:       req.Record.TargetPrice,
+		StopLossPrice:     req.Record.StopLossPrice,
+		PolicyImpactScope: req.Record.PolicyImpactScope,
+		PredictedChange:   req.Record.PredictedChange,
+		TraceID:           req.Record.TraceId,
 	}
 
 	if err := mysql.DB.Create(&record).Error; err != nil {
@@ -609,4 +611,166 @@ func (s *StockServiceImpl) DeleteEvaluation(ctx context.Context, req *stock.Dele
 	}
 
 	return &stock.DeleteEvaluationResponse{Success: true}, nil
+}
+
+// GetMarketTrends 实现 StockServiceImpl 接口
+func (s *StockServiceImpl) GetMarketTrends(ctx context.Context, req *stock.GetMarketTrendsRequest) (resp *stock.GetMarketTrendsResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.GetMarketTrendsResponse{}, nil
+	}
+
+	page := int(req.Page)
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := int(req.PageSize)
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var trends []model.MarketTrend
+	var total int64
+
+	query := mysql.DB.Model(&model.MarketTrend{}).Where("is_still_valid = ?", true)
+
+	if req.ImpactType != "" {
+		query = query.Where("impact_type = ?", req.ImpactType)
+	}
+
+	if req.RelatedStockId != "" {
+		// 假设 related_stocks 存储为 JSON 字符串数组，如 ["600519", "000001"]
+		// 使用 LIKE 进行模糊匹配
+		query = query.Where("related_stocks LIKE ?", fmt.Sprintf("%%%s%%", req.RelatedStockId))
+	}
+
+	if req.Query != "" {
+		q := "%" + req.Query + "%"
+		query = query.Where("title LIKE ? OR summary LIKE ?", q, q)
+	}
+
+	// Count total
+	if err := query.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	// Fetch page
+	dbQuery := query
+
+	// Default Hot Score Sort
+	orderBySQL := "weight / POW(LEAST(GREATEST(TIMESTAMPDIFF(HOUR, created_at, NOW()) + 2, 1), 720), CASE WHEN impact_type = 'policy_long_term' THEN 0.5 ELSE 1.5 END) DESC"
+
+	if req.Sort != "" {
+		// e.g. "weight_desc" -> "weight desc"
+		if req.Sort == "weight_desc" {
+			dbQuery = dbQuery.Order("weight desc")
+		} else if req.Sort == "created_at_desc" {
+			dbQuery = dbQuery.Order("created_at desc")
+		} else {
+			// default
+			dbQuery = dbQuery.Order(orderBySQL)
+		}
+	} else {
+		dbQuery = dbQuery.Order(orderBySQL)
+	}
+
+	if err := dbQuery.Limit(pageSize).Offset(offset).Find(&trends).Error; err != nil {
+		return nil, err
+	}
+
+	var thriftTrends []*stock.MarketTrend
+	for _, t := range trends {
+		// Parse RelatedSectors (JSON string) to []string
+		var sectors []string
+		if t.RelatedSectors != "" {
+			_ = json.Unmarshal([]byte(t.RelatedSectors), &sectors)
+		}
+
+		var stocks []string
+		if t.RelatedStocks != "" {
+			_ = json.Unmarshal([]byte(t.RelatedStocks), &stocks)
+		}
+
+		thriftTrends = append(thriftTrends, &stock.MarketTrend{
+			Id:                 t.ID,
+			Source:             t.Source,
+			Title:              t.Title,
+			Summary:            t.Summary,
+			OriginalUrl:        t.OriginalURL,
+			FinancialRelevance: int32(t.FinancialRelevance),
+			RelatedSectors:     sectors,
+			RelatedStocks:      stocks,
+			ImpactAnalysis:     t.ImpactAnalysis,
+			SentimentScore:     t.SentimentScore,
+			ImpactType:         t.ImpactType,
+			ImpactScope:        t.ImpactScope,
+			Weight:             t.Weight,
+			IsStillValid:       t.IsStillValid,
+			CreatedAt:          t.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:          t.UpdatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return &stock.GetMarketTrendsResponse{
+		Trends: thriftTrends,
+		Total:  total,
+	}, nil
+}
+
+// UpdateMarketTrend implements StockServiceImpl interface.
+func (s *StockServiceImpl) UpdateMarketTrend(ctx context.Context, req *stock.UpdateMarketTrendRequest) (resp *stock.UpdateMarketTrendResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.UpdateMarketTrendResponse{Success: false}, nil
+	}
+	if req.Trend == nil {
+		return &stock.UpdateMarketTrendResponse{Success: false}, fmt.Errorf("invalid request")
+	}
+
+	t := req.Trend
+	// Convert related sectors to JSON string
+	sectorsJSON, _ := json.Marshal(t.RelatedSectors)
+	stocksJSON, _ := json.Marshal(t.RelatedStocks)
+
+	// Prepare map for updates to handle zero values correctly if needed,
+	// but struct update is fine if we want to update all fields.
+	// However, GORM Updates with struct only updates non-zero fields.
+	// To update all fields including zero values (like false, 0), we should use map or Select.
+	// Here we assume we want to update all provided fields.
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+
+	updates := map[string]interface{}{
+		"source":              t.Source,
+		"title":               t.Title,
+		"summary":             t.Summary,
+		"original_url":        t.OriginalUrl,
+		"financial_relevance": int(t.FinancialRelevance),
+		"related_sectors":     string(sectorsJSON),
+		"related_stocks":      string(stocksJSON),
+		"impact_analysis":     t.ImpactAnalysis,
+		"sentiment_score":     t.SentimentScore,
+		"impact_type":         t.ImpactType,
+		"impact_scope":        t.ImpactScope,
+		"weight":              t.Weight,
+		"is_still_valid":      t.IsStillValid,
+		"updated_at":          time.Now().In(loc),
+	}
+
+	if err := mysql.DB.Model(&model.MarketTrend{}).Where("id = ?", t.Id).Updates(updates).Error; err != nil {
+		return &stock.UpdateMarketTrendResponse{Success: false}, err
+	}
+
+	return &stock.UpdateMarketTrendResponse{Success: true}, nil
+}
+
+// DeleteMarketTrend implements StockServiceImpl interface.
+func (s *StockServiceImpl) DeleteMarketTrend(ctx context.Context, req *stock.DeleteMarketTrendRequest) (resp *stock.DeleteMarketTrendResponse, err error) {
+	if mysql.DB == nil {
+		return &stock.DeleteMarketTrendResponse{Success: false}, nil
+	}
+
+	if err := mysql.DB.Delete(&model.MarketTrend{}, req.Id).Error; err != nil {
+		return &stock.DeleteMarketTrendResponse{Success: false}, err
+	}
+
+	return &stock.DeleteMarketTrendResponse{Success: true}, nil
 }

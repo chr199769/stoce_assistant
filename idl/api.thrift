@@ -163,7 +163,7 @@ struct GetEvaluationsResponse {
     1: list<EvaluationRecord> evaluations
 }
 
-service StockAPI {User {
+struct User {
     1: string id
     2: string username
     3: string created_at
@@ -255,6 +255,14 @@ struct GetDragonTigerListResponse {
     1: list<DragonTigerItem> items
 }
 
+struct DeleteEvaluationRequest {
+    1: string id (api.path="id")
+}
+
+struct DeleteEvaluationResponse {
+    1: bool success
+}
+
 service StockAPI {
     RealtimeResponse GetRealtime(1: GetRealtimeRequest req) (api.get="/api/stocks/:code/realtime")
     PredictionResponse GetPrediction(1: PredictionRequest req) (api.post="/api/prediction/:code")
@@ -283,4 +291,58 @@ service StockAPI {
     // Phase 3: Prediction Evaluation
     GetEvaluationsResponse GetEvaluations(1: GetEvaluationsRequest req) (api.get="/api/evaluations")
     DeleteEvaluationResponse DeleteEvaluation(1: DeleteEvaluationRequest req) (api.delete="/api/evaluations/:id")
+
+    // Market Trends
+    GetMarketTrendsResponse GetMarketTrends(1: GetMarketTrendsRequest req) (api.get="/api/market/trends")
+    UpdateMarketTrendResponse UpdateMarketTrend(1: UpdateMarketTrendRequest req) (api.post="/api/market/trends/update")
+    DeleteMarketTrendResponse DeleteMarketTrend(1: DeleteMarketTrendRequest req) (api.delete="/api/market/trends/:id")
+}
+
+struct MarketTrend {
+    1: i64 id
+    2: string source
+    3: string title
+    4: string summary
+    5: string original_url
+    6: i32 financial_relevance
+    7: list<string> related_sectors
+    8: list<string> related_stocks
+    9: string impact_analysis
+    10: double sentiment_score
+    11: string impact_type
+    12: double weight
+    13: bool is_still_valid
+    14: string created_at
+    15: string updated_at
+    16: string impact_scope // "specific", "sector", "market_wide"
+}
+
+struct GetMarketTrendsRequest {
+    1: i32 page (api.query="page", default="1")
+    2: i32 page_size (api.query="page_size", default="20")
+    3: string impact_type (api.query="impact_type")
+    4: string related_stock_id (api.query="related_stock_id")
+    5: string query (api.query="query")
+    6: string sort (api.query="sort")
+}
+
+struct GetMarketTrendsResponse {
+    1: list<MarketTrend> trends
+    2: i64 total
+}
+
+struct UpdateMarketTrendRequest {
+    1: MarketTrend trend (api.body="trend")
+}
+
+struct UpdateMarketTrendResponse {
+    1: bool success
+}
+
+struct DeleteMarketTrendRequest {
+    1: i64 id (api.path="id")
+}
+
+struct DeleteMarketTrendResponse {
+    1: bool success
 }

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"log"
+	"math"
 	"time"
 
 	"stock_assistant/backend/common/eastmoney"
@@ -67,42 +68,50 @@ func (w *EvalWorker) processEvaluation(eval *model.EvaluationRecord) {
 
 	// Find the prediction date index
 	predDateStr := eval.PredictionDate.Format("2006-01-02")
-	predIdx := -1
+	rawIdx := -1
 	for i, k := range klines {
 		if k.Date >= predDateStr {
 			// Find the closest trading day >= prediction date
-			predIdx = i
+			rawIdx = i
 			break
 		}
 	}
 
-	if predIdx == -1 {
+	if rawIdx == -1 {
 		// Prediction date is too new or not in history yet?
 		// Or history too short.
 		return
 	}
 
+	// Calculate effective base index
+	// If prediction was made after 15:00, the effective T=0 is the NEXT trading day.
+	// So baseIdx = rawIdx + 1
+	baseIdx := rawIdx
+	if eval.PredictionDate.Hour() >= 15 {
+		baseIdx = rawIdx + 1
+	}
+
 	updated := false
 
 	// We map relative days (1, 2, 3) to klines array indices
-	// If predIdx corresponds to the prediction date, then predIdx+1 is T+1.
-	
-	if predIdx+1 < len(klines) {
-		eval.Price1D = klines[predIdx+1].Close
+	// If baseIdx corresponds to the effective T=0, then baseIdx+1 is T+1.
+
+	if baseIdx+1 < len(klines) {
+		eval.Price1D = klines[baseIdx+1].Close
 		updated = true
 	}
-	if predIdx+2 < len(klines) {
-		eval.Price2D = klines[predIdx+2].Close
+	if baseIdx+2 < len(klines) {
+		eval.Price2D = klines[baseIdx+2].Close
 		updated = true
 	}
-	if predIdx+3 < len(klines) {
-		eval.Price3D = klines[predIdx+3].Close
+	if baseIdx+3 < len(klines) {
+		eval.Price3D = klines[baseIdx+3].Close
 		updated = true
-		
+
 		// Finalize
 		eval.Status = "completed"
 		eval.Score = w.calculateScore(eval)
-		
+
 		// Send score to Langfuse
 		if w.lf != nil {
 			// Retrieve TraceID from PredictionRecord
@@ -112,7 +121,7 @@ func (w *EvalWorker) processEvaluation(eval *model.EvaluationRecord) {
 			}
 		}
 	}
-	
+
 	if updated {
 		mysql.DB.Save(eval)
 	}
@@ -122,36 +131,85 @@ func (w *EvalWorker) calculateScore(eval *model.EvaluationRecord) float64 {
 	if eval.InitialPrice == 0 {
 		return 0
 	}
-	
-	roi := (eval.Price3D - eval.InitialPrice) / eval.InitialPrice
-	
-	// Get prediction trend to see if we matched direction
+
+	// Actual change in percentage (e.g., 5.0 for 5%)
+	actualChange := (eval.Price3D - eval.InitialPrice) / eval.InitialPrice * 100
+
+	// Get prediction record
 	var pred model.PredictionRecord
 	mysql.DB.First(&pred, "id = ?", eval.PredictionID)
-	
-	score := 50.0
-	
-	// Direction match bonus
-	if pred.Trend == "看涨" || pred.Trend == "Up" {
-		if roi > 0 {
-			score += 20 // Correct direction
-			score += roi * 100 // Add ROI points (e.g. 10% gain -> +10 pts)
-		} else {
-			score -= 20 // Wrong direction
-			score += roi * 100 // Subtract loss
-		}
-	} else if pred.Trend == "看跌" || pred.Trend == "Down" {
-		if roi < 0 {
-			score += 20
-			score -= roi * 100 // Positive points for negative ROI
-		} else {
-			score -= 20
-			score -= roi * 100
-		}
+
+	score := 0.0
+
+	// Check if we should use legacy scoring (if PredictedChange is 0 but Trend is set)
+	// We treat 0 PredictedChange with "Up"/"Down" trend as legacy.
+	usingLegacy := false
+	if pred.PredictedChange == 0 && (pred.Trend == "Up" || pred.Trend == "Down" || pred.Trend == "看涨" || pred.Trend == "看跌") {
+		usingLegacy = true
 	}
-	
-	if score > 100 { score = 100 }
-	if score < 0 { score = 0 }
-	
+
+	if usingLegacy {
+		roi := (eval.Price3D - eval.InitialPrice) / eval.InitialPrice
+		score = 50.0
+		if pred.Trend == "看涨" || pred.Trend == "Up" {
+			if roi > 0 {
+				score += 20
+				score += roi * 100
+			} else {
+				score -= 20
+				score += roi * 100
+			}
+		} else if pred.Trend == "看跌" || pred.Trend == "Down" {
+			if roi < 0 {
+				score += 20
+				score -= roi * 100
+			} else {
+				score -= 20
+				score -= roi * 100
+			}
+		}
+	} else {
+		// New Logic: 50pts for direction + 50pts for accuracy
+
+		// 1. Direction Correct
+		sameDirection := false
+		if pred.PredictedChange > 0 && actualChange > 0 {
+			sameDirection = true
+		} else if pred.PredictedChange < 0 && actualChange < 0 {
+			sameDirection = true
+		} else if math.Abs(pred.PredictedChange) < 1e-6 && math.Abs(actualChange) < 1e-6 {
+			sameDirection = true
+		}
+
+		if sameDirection {
+			score += 50
+		}
+
+		// 2. Accuracy Score: 50 * (1 - |pred - actual| / |actual|)
+		diff := math.Abs(pred.PredictedChange - actualChange)
+		var accuracyRatio float64
+
+		absActual := math.Abs(actualChange)
+		if absActual > 1e-6 {
+			accuracyRatio = 1.0 - (diff / absActual)
+		} else {
+			// If actual change is ~0, penalize by absolute difference
+			accuracyRatio = 1.0 - diff
+		}
+
+		if accuracyRatio < 0 {
+			accuracyRatio = 0
+		}
+
+		score += 50 * accuracyRatio
+	}
+
+	if score > 100 {
+		score = 100
+	}
+	if score < 0 {
+		score = 0
+	}
+
 	return score
 }

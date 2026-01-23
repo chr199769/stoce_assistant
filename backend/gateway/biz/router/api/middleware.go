@@ -144,3 +144,33 @@ func _removewatchlistMw() []app.HandlerFunc {
 func _getevaluationsMw() []app.HandlerFunc {
 	return nil
 }
+
+func _evaluationsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _deleteevaluationMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _trendsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getmarkettrendsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _deletemarkettrendMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updatemarkettrendMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

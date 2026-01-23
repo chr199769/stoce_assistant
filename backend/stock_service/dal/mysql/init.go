@@ -5,6 +5,8 @@ import (
 	"os"
 	"stock_assistant/backend/stock_service/dal/model"
 
+	"time"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -23,7 +25,15 @@ func Init() {
 	}
 
 	var err error
-	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+		NowFunc: func() time.Time {
+			loc, err := time.LoadLocation("Asia/Shanghai")
+			if err != nil {
+				return time.Now()
+			}
+			return time.Now().In(loc)
+		},
+	})
 	if err != nil {
 		fmt.Printf("Warning: Failed to connect to MySQL: %v. Persistence will be disabled.\n", err)
 		return
@@ -39,6 +49,7 @@ func Init() {
 		&model.User{},
 		&model.PredictionRecord{},
 		&model.EvaluationRecord{},
+		&model.MarketTrend{},
 	)
 	if err != nil {
 		fmt.Printf("Warning: Failed to auto migrate: %v\n", err)

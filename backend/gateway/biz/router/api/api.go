@@ -20,7 +20,8 @@ func Register(r *server.Hertz) {
 	{
 		_api := root.Group("/api", _apiMw()...)
 		_api.GET("/evaluations", append(_getevaluationsMw(), api.GetEvaluations)...)
-		_api.DELETE("/evaluations/:id", append(_getevaluationsMw(), api.DeleteEvaluation)...)
+		_evaluations := _api.Group("/evaluations", _evaluationsMw()...)
+		_evaluations.DELETE("/:id", append(_deleteevaluationMw(), api.DeleteEvaluation)...)
 		{
 			_image := _api.Group("/image", _imageMw()...)
 			_image.POST("/recognize", append(_recognizestockimageMw(), api.RecognizeStockImage)...)
@@ -31,6 +32,10 @@ func Register(r *server.Hertz) {
 			_market.GET("/limit_up", append(_getlimituppoolMw(), api.GetLimitUpPool)...)
 			_market.POST("/review", append(_marketreviewMw(), api.MarketReview)...)
 			_market.GET("/sectors", append(_getmarketsectorsMw(), api.GetMarketSectors)...)
+			_market.GET("/trends", append(_getmarkettrendsMw(), api.GetMarketTrends)...)
+			_trends := _market.Group("/trends", _trendsMw()...)
+			_trends.DELETE("/:id", append(_deletemarkettrendMw(), api.DeleteMarketTrend)...)
+			_trends.POST("/update", append(_updatemarkettrendMw(), api.UpdateMarketTrend)...)
 		}
 		{
 			_prediction := _api.Group("/prediction", _predictionMw()...)

@@ -5,11 +5,13 @@ package main
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	handler "stock_assistant/backend/gateway/biz/handler"
+	"stock_assistant/backend/gateway/biz/router"
 )
 
 // customizeRegister registers customize routers.
 func customizedRegister(r *server.Hertz) {
 	r.GET("/ping", handler.Ping)
 
-	// your code ...
+	// Manual routes
+	router.RegisterManualRoutes(r)
 }

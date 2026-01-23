@@ -20,7 +20,10 @@ type KlineResponse struct {
 
 func (c *Client) GetKlineHistory(ctx context.Context, code string, days int) ([]*KlineItem, error) {
 	secID := "0." + code
-	if len(code) > 2 {
+	// 如果代码包含点，假设已经是 secID (例如 1.000001)
+	if strings.Contains(code, ".") {
+		secID = code
+	} else if len(code) > 2 {
 		prefix := code[:2]
 		numCode := code
 		if prefix == "sh" || prefix == "sz" {
@@ -40,28 +43,18 @@ func (c *Client) GetKlineHistory(ctx context.Context, code string, days int) ([]
 		}
 	}
 
-	url := fmt.Sprintf("http://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1&fields2=f51,f52,f53,f54,f55,f56,f59&klt=101&fqt=1&secid=%s&lmt=%d&end=20500101", secID, days)
+	url := fmt.Sprintf("https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1&fields2=f51,f52,f53,f54,f55,f56,f59&klt=101&fqt=1&secid=%s&lmt=%d&end=20500101", secID, days)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", "http://quote.eastmoney.com/")
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-	req.Header.Set("Connection", "keep-alive")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("eastmoney kline api error: status=%d", resp.StatusCode)
-	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

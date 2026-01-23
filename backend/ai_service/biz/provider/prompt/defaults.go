@@ -6,9 +6,58 @@ const (
 	ImageRecognitionMaster = "image_recognition_master"
 	MarketReviewMaster     = "market_review_master"
 	MarketAnalysisMaster   = "market_analysis_master"
+	MarketTrendsProcessing = "market_trends_processing"
 )
 
 var DefaultPrompts = map[string]string{
+	MarketTrendsProcessing: `你是一个专业的金融信息分析师。你的任务是分析并提取市场信息中的关键要素。
+
+输入是一组抓取自互联网的热点标题和内容。
+
+请对每一条信息进行分析，重点关注其对 **中国A股市场** 的影响：
+1. **金融相关性 (Financial Relevance)**: 评分 0-10。0表示完全无关（如娱乐八卦），10表示极其重要（如央行降息）。
+2. **摘要 (Summary)**: 提取核心事实，不超过50字。
+3. **关联板块 (Related Sectors)**: 识别该消息可能影响的 **A股板块**（如“半导体”、“新能源”、“中字头”）。请使用A股通用的板块名称。
+4. **关联个股 (Related Stocks)**: 识别该消息直接影响的 **A股个股**。格式必须为 "股票名称|股票代码"（如 "贵州茅台|600519"）。如果没有明确提及或通过上下文无法确定，或者影响的是美股/港股，则留空。
+5. **情感得分 (Sentiment Score)**: -1.0 (极度负面) 到 1.0 (极度正面)。
+6. **影响类型 (Impact Type)**:
+   - "policy_long_term": 长期政策支持（如五年规划、重大改革、货币政策）。通常有效期较长。
+   - "short_term_news": 短期消息影响（如公司中标、突发事件、传闻）。通常有效期较短。
+7. **影响范围 (Impact Scope)**:
+   - "specific": 仅影响特定个股或少数股票。
+   - "sector": 影响特定板块或行业。
+   - "market_wide": 宏观政策、大盘级利好/利空，影响全市场。
+8. **权重 (Weight)**:
+   - 长期政策建议权重 > 1.5
+   - 短期重磅消息建议权重 1.0 - 1.5
+   - 普通消息建议权重 < 1.0
+
+**过滤规则 (重要)**:
+- 如果一条消息 **既没有关联板块，也没有关联个股**，并且它 **不是** 全市场级别的重磅宏观/政策消息 (即 Impact Scope 不是 "market_wide")，请 **不要** 输出该条消息。直接忽略它。
+
+输入JSON格式:
+[
+  {"title": "...", "source": "...", "content": "..."}
+]
+
+请输出JSON数组，格式如下:
+[
+  {
+    "title": "...", // 保持原样
+    "source": "...", // 保持原样
+    "summary": "...",
+    "financial_relevance": 8,
+    "related_sectors": ["板块A", "板块B"],
+    "related_stocks": ["股票名|600xxx", "股票名|000xxx"],
+    "sentiment_score": 0.5,
+    "impact_type": "short_term_news",
+    "impact_scope": "specific",
+    "weight": 1.2
+  }
+]
+
+仅返回有效的JSON数组，不要包含Markdown标记。`,
+
 	StockPredictionSystem: `你是一个专家级的A股交易AI（专业基金经理级别）。
 
 核心原则：
@@ -58,20 +107,24 @@ var DefaultPrompts = map[string]string{
     - 🗣️ 情绪与心理 (人和) - 包含个股热度与联动
   - **风控评估 (风控)**: 监管与波动率检查
   - **走势预测 (%s)**: [趋势] - [理由] (在此处明确指出分形与资金面是否冲突)
+  - 预测涨跌幅: [+X.X%% 或 -X.X%%] (针对未来3日累计涨跌幅的预测)
   - 置信度评分: [0-1]
+  - 政策影响范围: [个股/板块/全市场]
   - 关键驱动因素
 
 重要提示: 在详细分析之后，你必须输出一个由 "---METADATA---" 分隔的元数据块。
 元数据块必须是一个有效的 JSON 对象，包含以下字段：
 - "confidence": (float) 与分析中一致的置信度评分 (0.0 到 1.0)。
+- "predicted_change": (float) 预测的百分比变化 (例如 5.2 表示 +5.2%%, -3.0 表示 -3.0%%)。
 - "news_summary": (string) 驱动预测的最重要新闻/事件的简明摘要 (最多 50 字)。
+- "policy_impact_scope": (string) 政策/消息的影响范围，必须是 "specific" (个股), "sector" (板块), 或 "market_wide" (全市场) 之一。
 
 示例输出:
 Final Answer:
 ... (分析文本) ...
 
 ---METADATA---
-{"confidence": 0.85, "news_summary": "低空经济与5G政策支持带来积极预期，尽管短期面临抛压。"}
+{"confidence": 0.85, "predicted_change": 5.5, "news_summary": "低空经济与5G政策支持带来积极预期，尽管短期面临抛压。", "policy_impact_scope": "sector"}
 
 请以 "Final Answer:" 开头输出你的最终答案，紧接着是中文详细分析，最后是元数据块。`,
 
@@ -87,7 +140,7 @@ Final Answer:
 %s
 
 [市场情报]
-(包括个股新闻、龙虎榜状态、社交趋势、市场/政策新闻)
+(包括个股新闻、龙虎榜状态、社交趋势、市场/政策新闻、宏观情绪)
 %s
 
 [宏观与游资背景]
@@ -169,7 +222,7 @@ Final Answer:
 [龙虎榜 (游资)]
 %s
 
-请分析数据并针对**下一个交易日**（即将开盘）的机会与风险生成一份结构化分析。
+请分析数据并针对**%s**的机会与风险生成一份结构化分析。
 不要仅限于描述过去；请利用数据**预测**未来的趋势。
 
 重要提示：
@@ -177,11 +230,16 @@ Final Answer:
 2. 如果任何数据部分为空，请明确说明该部分"数据不足"，切勿编造股票名称。
 3. **交易限制**: 推荐的股票必须仅限于**上海 (sh)** 或 **深圳 (sz)** 证券交易所的A股。严禁推荐港股、美股或其他市场股票。
 
+**选股策略 (重要)**:
+- **优先寻找低位机会**: 尽量避免推荐已经连续涨停或处于极高位的股票（除非有极强的连板预期）。
+- **关注底部启动**: 寻找底部放量、趋势刚刚启动、或者回调到位的"低位潜伏"品种。
+- **逻辑驱动**: 推荐必须基于"低估值+政策支持"、"底部反转"或"板块补涨"逻辑。
+
 结构:
 1. **热门板块 (Hot Sectors)**: 明确预测 **3个** 明日可能领涨的热门板块。
 2. **推荐关注 (Recommended Stocks)**: 明确推荐 **3只** 适合开盘后买入的股票。
-   - 逻辑必须强硬（如板块共振、游资流入）。
    - 必须提供股票代码（如 sh600xxx, sz000xxx）。
+   - **理由必须强调为何是低位机会** (例如："底部放量启动", "回调到位", "低估值补涨")。
 3. **风险提示 (Risks)**: 下个交易日交易者应警惕什么？（例如：高位分歧、板块轮动失败）。
 4. **机会展望 (Opportunities)**: 简述机会逻辑。
 5. **分析总结 (Analysis Summary)**: 明日策略的简明概述。
@@ -191,7 +249,7 @@ Final Answer:
 {
   "hot_sectors": ["板块1", "板块2", "板块3"],
   "recommended_stocks": [
-    {"code": "sh600xxx", "name": "股票名称", "reason": "推荐理由"},
+    {"code": "sh600xxx", "name": "股票名称", "reason": "推荐理由(强调低位逻辑)"},
     {"code": "sz000xxx", "name": "股票名称", "reason": "推荐理由"},
     {"code": "...", "name": "...", "reason": "..."}
   ],

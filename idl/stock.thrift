@@ -225,6 +225,8 @@ struct PredictionRecord {
     7: double target_price // optional
     8: double stop_loss_price // optional
     9: string trace_id // Langfuse Trace ID
+    10: string policy_impact_scope // "specific", "sector", "market_wide"
+    11: double predicted_change // Percentage change
 }
 
 struct SavePredictionRequest {
@@ -239,14 +241,14 @@ struct EvaluationRecord {
     1: string id
     2: string prediction_id
     3: string stock_code
-    4: string prediction_date
-    5: double initial_price
-    6: double price_1d
-    7: double price_2d
-    8: double price_3d
-    9: double score
-    10: string status // "pending", "completed"
-    11: string stock_name
+    4: string stock_name
+    5: string prediction_date
+    6: double initial_price
+    7: double price_1d
+    8: double price_2d
+    9: double price_3d
+    10: double score
+    11: string status // "pending", "completed"
 }
 
 struct GetEvaluationsRequest {
@@ -294,4 +296,58 @@ service StockService {
     SavePredictionResponse SavePrediction(1: SavePredictionRequest req)
     GetEvaluationsResponse GetEvaluations(1: GetEvaluationsRequest req)
     DeleteEvaluationResponse DeleteEvaluation(1: DeleteEvaluationRequest req)
+
+    // Market Intelligence
+    GetMarketTrendsResponse GetMarketTrends(1: GetMarketTrendsRequest req)
+    UpdateMarketTrendResponse UpdateMarketTrend(1: UpdateMarketTrendRequest req)
+    DeleteMarketTrendResponse DeleteMarketTrend(1: DeleteMarketTrendRequest req)
+}
+
+struct MarketTrend {
+    1: i64 id
+    2: string source
+    3: string title
+    4: string summary
+    5: string original_url
+    6: i32 financial_relevance
+    7: list<string> related_sectors
+    8: double sentiment_score
+    9: string impact_type
+    10: double weight
+    11: bool is_still_valid
+    12: string created_at
+    13: string updated_at
+    14: list<string> related_stocks
+    15: string impact_analysis
+    16: string impact_scope // "specific", "sector", "market_wide"
+}
+
+struct GetMarketTrendsRequest {
+    1: i32 page = 1
+    2: i32 page_size = 20
+    3: string impact_type // optional filter
+    4: string related_stock_id // optional filter: specific stock code
+    5: string query // optional search keyword
+    6: string sort // optional sort order, e.g. "weight_desc", "created_at_desc"
+}
+
+struct GetMarketTrendsResponse {
+    1: list<MarketTrend> trends
+    2: i64 total
+}
+
+struct UpdateMarketTrendRequest {
+    1: MarketTrend trend
+}
+
+struct UpdateMarketTrendResponse {
+    1: bool success
+}
+
+struct DeleteMarketTrendRequest {
+    1: i64 id
+}
+
+struct DeleteMarketTrendResponse {
+    1: bool success
 }

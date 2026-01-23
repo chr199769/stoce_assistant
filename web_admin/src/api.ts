@@ -35,4 +35,40 @@ export const deleteEvaluation = async (id: string) => {
   return res.data;
 };
 
+export interface MarketTrend {
+  id: number;
+  source: string;
+  title: string;
+  summary: string;
+  original_url: string;
+  financial_relevance: number;
+  related_sectors: string[];
+  related_stocks?: string[];
+  impact_analysis?: string;
+  sentiment_score: number;
+  impact_type: string;
+  impact_scope: string;
+  weight: number;
+  is_still_valid: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getMarketTrends = async (page = 1, pageSize = 20, impactType?: string) => {
+  const params: any = { page, page_size: pageSize };
+  if (impactType) params.impact_type = impactType;
+  const res = await api.get<{ trends: MarketTrend[], total: number }>('/market/trends', { params });
+  return res.data;
+};
+
+export const updateMarketTrend = async (trend: MarketTrend) => {
+  const res = await api.post<{ success: boolean }>('/market/trends/update', { trend });
+  return res.data;
+};
+
+export const deleteMarketTrend = async (id: number) => {
+  const res = await api.delete<{ success: boolean }>(`/market/trends/${id}`);
+  return res.data;
+};
+
 export default api;

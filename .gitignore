@@ -38,3 +38,4 @@ backend/stock_service/conf/prod.json
 
 # Infrastructure
 infrastructure/docker-compose.yml
+.trae/rules/project_rules.md

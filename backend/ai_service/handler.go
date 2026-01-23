@@ -2,53 +2,44 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"os"
-	"stock_assistant/backend/ai_service/biz/provider/llm"
+	"stock_assistant/backend/ai_service/biz/provider/llm/analyst"
+	"stock_assistant/backend/ai_service/biz/provider/llm/core"
+	"stock_assistant/backend/ai_service/biz/provider/llm/predictor"
+	"stock_assistant/backend/ai_service/biz/provider/llm/vision"
+	"stock_assistant/backend/ai_service/biz/rpc"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
-	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 	"strings"
 	"time"
 
-	"github.com/cloudwego/kitex/client"
 	"github.com/google/uuid"
 )
 
 // AIServiceImpl implements the last service interface defined in the IDL.
 type AIServiceImpl struct {
-	llmProvider llm.Provider
-	stockClient stockservice.Client
+	predictor *predictor.Provider
+	analyst   *analyst.Provider
+	vision    *vision.Provider
 }
 
-func NewAIServiceImpl(llmConfig *llm.FileConfig) *AIServiceImpl {
-	stockAddr := os.Getenv("STOCK_SERVICE_ADDR")
-	if stockAddr == "" {
-		stockAddr = "localhost:8888"
-	}
-	c, err := stockservice.NewClient("stock_service", client.WithHostPorts(stockAddr))
-	if err != nil {
-		log.Printf("初始化 stock 客户端失败: %v", err)
-	}
-
-	p, err := llm.NewLangChainProvider(context.Background(), c, llmConfig)
-	if err != nil {
-		log.Printf("初始化 langchain provider 失败: %v", err)
-		// 如果我们严格不希望使用 mock，这里应该 panic。
-		// 所以让我们直接 log fatal。
-		log.Fatalf("严重错误: 初始化 LLM provider 失败且 mock 未启用: %v", err)
-	}
+func NewAIServiceImpl(llmConfig *core.FileConfig) *AIServiceImpl {
+	pred := predictor.NewProvider(llmConfig)
+	ana := analyst.NewProvider(llmConfig)
+	vis := vision.NewProvider(llmConfig)
 
 	return &AIServiceImpl{
-		llmProvider: p,
-		stockClient: c,
+		predictor: pred,
+		analyst:   ana,
+		vision:    vis,
 	}
 }
 
 // GetPrediction implements the AIServiceImpl interface.
 func (s *AIServiceImpl) GetPrediction(ctx context.Context, req *ai.GetPredictionRequest) (resp *ai.GetPredictionResponse, err error) {
 	log.Printf("收到预测请求: 代码=%s, 模型=%s", req.Code, req.Model)
-	analysis, confidence, newsSummary, traceID, err := s.llmProvider.Predict(ctx, req.Code, req.Days, req.Model)
+	analysis, confidence, newsSummary, traceID, predictedChange, policyImpactScope, err := s.predictor.Predict(ctx, req.Code, req.Days, req.Model)
 	if err != nil {
 		log.Printf("预测失败: %v", err)
 		return nil, err
@@ -64,17 +55,19 @@ func (s *AIServiceImpl) GetPrediction(ctx context.Context, req *ai.GetPrediction
 
 	saveReq := &stock.SavePredictionRequest{
 		Record: &stock.PredictionRecord{
-			Id:             uuid.New().String(),
-			StockCode:      req.Code,
-			PredictionDate: time.Now().Format("2006-01-02 15:04:05"),
-			Content:        analysis,
-			Confidence:     confidence,
-			Trend:          trend,
-			TraceId:        traceID,
+			Id:                uuid.New().String(),
+			StockCode:         req.Code,
+			PredictionDate:    time.Now().Format("2006-01-02 15:04:05"),
+			Content:           analysis,
+			Confidence:        confidence,
+			Trend:             trend,
+			TraceId:           traceID,
+			PolicyImpactScope: policyImpactScope,
+			PredictedChange:   predictedChange,
 		},
 	}
 
-	_, saveErr := s.stockClient.SavePrediction(ctx, saveReq)
+	_, saveErr := rpc.StockClient.SavePrediction(ctx, saveReq)
 	if saveErr != nil {
 		log.Printf("保存预测结果失败: %v", saveErr)
 	}
@@ -94,7 +87,7 @@ func (s *AIServiceImpl) GetPrediction(ctx context.Context, req *ai.GetPrediction
 func (s *AIServiceImpl) ImageRecognition(ctx context.Context, req *ai.ImageRecognitionRequest) (resp *ai.ImageRecognitionResponse, err error) {
 	log.Printf("收到图像识别请求: 模型=%s, 图片大小=%d", req.Model, len(req.ImageData))
 
-	stocks, err := s.llmProvider.RecognizeImage(ctx, req.ImageData, req.Model)
+	stocks, err := s.vision.RecognizeImage(ctx, req.ImageData, req.Model)
 	if err != nil {
 		log.Printf("图像识别失败: %v", err)
 		return nil, err
@@ -114,7 +107,7 @@ func (s *AIServiceImpl) MarketReview(ctx context.Context, req *ai.MarketReviewRe
 		Type:  "concept",
 		Limit: 20,
 	}
-	sectorResp, err := s.stockClient.GetMarketSectors(ctx, sectorReq)
+	sectorResp, err := rpc.StockClient.GetMarketSectors(ctx, sectorReq)
 	if err != nil {
 		log.Printf("获取市场板块失败: %v", err)
 		return nil, err
@@ -124,7 +117,7 @@ func (s *AIServiceImpl) MarketReview(ctx context.Context, req *ai.MarketReviewRe
 	limitUpReq := &stock.GetLimitUpPoolRequest{
 		Date: req.Date,
 	}
-	limitUpResp, err := s.stockClient.GetLimitUpPool(ctx, limitUpReq)
+	limitUpResp, err := rpc.StockClient.GetLimitUpPool(ctx, limitUpReq)
 	if err != nil {
 		log.Printf("获取涨停池失败: %v", err)
 		return nil, err
@@ -134,7 +127,7 @@ func (s *AIServiceImpl) MarketReview(ctx context.Context, req *ai.MarketReviewRe
 	dtReq := &stock.GetDragonTigerListRequest{
 		Date: req.Date,
 	}
-	dtResp, err := s.stockClient.GetDragonTigerList(ctx, dtReq)
+	dtResp, err := rpc.StockClient.GetDragonTigerList(ctx, dtReq)
 	if err != nil {
 		log.Printf("获取龙虎榜失败: %v", err)
 		// 不要让整个请求失败，只需记录日志并传递 nil/空值
@@ -142,7 +135,7 @@ func (s *AIServiceImpl) MarketReview(ctx context.Context, req *ai.MarketReviewRe
 	}
 
 	// 4. 调用 LLM 提供商
-	review, err := s.llmProvider.ReviewMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, dtResp.Items, req.Date)
+	review, err := s.analyst.ReviewMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, dtResp.Items, req.Date)
 	if err != nil {
 		log.Printf("生成市场复盘失败: %v", err)
 		return nil, err
@@ -160,7 +153,7 @@ func (s *AIServiceImpl) AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysi
 		Type:  "concept",
 		Limit: 20,
 	}
-	sectorResp, err := s.stockClient.GetMarketSectors(ctx, sectorReq)
+	sectorResp, err := rpc.StockClient.GetMarketSectors(ctx, sectorReq)
 	if err != nil {
 		log.Printf("获取市场板块失败: %v", err)
 		return nil, err
@@ -170,7 +163,7 @@ func (s *AIServiceImpl) AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysi
 	limitUpReq := &stock.GetLimitUpPoolRequest{
 		Date: req.Date,
 	}
-	limitUpResp, err := s.stockClient.GetLimitUpPool(ctx, limitUpReq)
+	limitUpResp, err := rpc.StockClient.GetLimitUpPool(ctx, limitUpReq)
 	if err != nil {
 		log.Printf("获取涨停池失败: %v", err)
 		return nil, err
@@ -180,20 +173,90 @@ func (s *AIServiceImpl) AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysi
 	dtReq := &stock.GetDragonTigerListRequest{
 		Date: req.Date,
 	}
-	dtResp, err := s.stockClient.GetDragonTigerList(ctx, dtReq)
+	dtResp, err := rpc.StockClient.GetDragonTigerList(ctx, dtReq)
 	if err != nil {
 		log.Printf("获取龙虎榜失败: %v", err)
 		// 不要让整个请求失败，只需记录日志并传递 nil/空值
 		dtResp = &stock.GetDragonTigerListResponse{}
 	}
 
+	// 4. 调用 LLM 提供商 (Analyst Agent - 初筛)
 	// 4. 调用 LLM 提供商
-	log.Printf("调用 AnalyzeMarket 参数: 板块数=%d, 涨停数=%d, 龙虎榜数=%d", len(sectorResp.Sectors), len(limitUpResp.Stocks), len(dtResp.Items))
-	analysis, err := s.llmProvider.AnalyzeMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, dtResp.Items, req.Date)
+	analysis, recStocks, err := s.analyst.AnalyzeMarket(ctx, sectorResp.Sectors, limitUpResp.Stocks, dtResp.Items, req.Date)
 	if err != nil {
 		log.Printf("生成市场分析失败: %v", err)
 		return nil, err
 	}
 
+	// 5. 验证并修正推荐股票名称 (防止 AI 幻觉)
+	for i, rec := range analysis.RecommendedStocks {
+		// 预期格式: "股票名称 (代码): 理由"
+		rec = strings.TrimSpace(rec)
+		colon := strings.IndexAny(rec, ":：")
+		if colon == -1 {
+			continue
+		}
+
+		pre := strings.TrimSpace(rec[:colon])
+		reason := strings.TrimSpace(rec[colon+1:])
+
+		pre = strings.ReplaceAll(pre, "（", "(")
+		pre = strings.ReplaceAll(pre, "）", ")")
+
+		start := strings.LastIndex(pre, "(")
+		end := strings.LastIndex(pre, ")")
+		if start == -1 || end == -1 || end <= start {
+			continue
+		}
+
+		currentName := strings.TrimSpace(pre[:start])
+		code := strings.TrimSpace(pre[start+1 : end])
+		code = strings.Trim(code, "()")
+
+		realtimeResp, err := rpc.StockClient.GetRealtime(ctx, &stock.GetRealtimeRequest{Code: code})
+		if err != nil || realtimeResp == nil || realtimeResp.Stock == nil || realtimeResp.Stock.Name == "" {
+			log.Printf("无法验证股票代码: %s, err: %v", code, err)
+			continue
+		}
+
+		realName := realtimeResp.Stock.Name
+		if currentName != "" && currentName != realName {
+			log.Printf("修正股票名称幻觉: 代码=%s, AI称=%s, 实际=%s", code, currentName, realName)
+			analysis.RecommendedStocks[i] = fmt.Sprintf("%s (%s): %s", realName, code, reason)
+		}
+	}
+	// 自动追踪推荐股票
+	if len(recStocks) > 0 {
+		go func(codes []string) {
+			for _, code := range codes {
+				// 调用 GetPrediction 进行详细分析和追踪
+				log.Printf("对推荐股票 %s 进行详细预测...", code)
+				_, err := s.GetPrediction(context.Background(), &ai.GetPredictionRequest{
+					Code:  code,
+					Days:  3,                // 预测未来3天
+					Model: "glm-4.6v-flash", // 使用默认模型
+				})
+				if err != nil {
+					log.Printf("自动预测失败: %s, %v", code, err)
+				}
+			}
+		}(recStocks)
+	}
+
 	return analysis, nil
+}
+
+// ProcessMarketTrends implements the AIServiceImpl interface.
+func (s *AIServiceImpl) ProcessMarketTrends(ctx context.Context, req *ai.ProcessMarketTrendsRequest) (resp *ai.ProcessMarketTrendsResponse, err error) {
+	log.Printf("收到市场趋势处理请求: 条目数=%d", len(req.Items))
+
+	items, err := s.analyst.ProcessMarketTrends(ctx, req.Items)
+	if err != nil {
+		log.Printf("处理市场趋势失败: %v", err)
+		return nil, err
+	}
+
+	return &ai.ProcessMarketTrendsResponse{
+		Items: items,
+	}, nil
 }

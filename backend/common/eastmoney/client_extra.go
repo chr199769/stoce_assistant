@@ -401,7 +401,7 @@ type orderBookResponse struct {
 
 func (c *Client) GetOrderBook(ctx context.Context, code string) (*OrderBookData, error) {
 	secId := getSecId(code)
-	url := fmt.Sprintf("http://push2.eastmoney.com/api/qt/stock/get?fltt=2&invt=2&klt=101&secid=%s&fields=f19,f20,f17,f18,f15,f16,f13,f14,f11,f12,f39,f40,f37,f38,f35,f36,f33,f34,f31,f32,f191,f192", secId)
+	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/stock/get?fltt=2&invt=2&klt=101&secid=%s&fields=f19,f20,f17,f18,f15,f16,f13,f14,f11,f12,f39,f40,f37,f38,f35,f36,f33,f34,f31,f32,f191,f192", secId)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -519,7 +519,7 @@ type industryResponse struct {
 
 func (c *Client) GetIndustryIndex(ctx context.Context, code string) (*IndustryIndexData, error) {
 	secId := getSecId(code)
-	url := fmt.Sprintf("http://push2.eastmoney.com/api/qt/stock/get?secid=%s&fields=f127,f128,f129", secId)
+	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/stock/get?secid=%s&fields=f127,f128,f129", secId)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

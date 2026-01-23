@@ -5,6 +5,7 @@ import { getEvaluations, deleteEvaluation, type EvaluationRecord } from '../api'
 const EvaluationList: React.FC = () => {
   const [data, setData] = useState<EvaluationRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
   useEffect(() => {
     loadData();
@@ -15,6 +16,7 @@ const EvaluationList: React.FC = () => {
     try {
       const res = await getEvaluations();
       setData(res.evaluations || []);
+      setSelectedRowKeys([]); // clear selection after reload
     } catch (e) {
       console.error(e);
       message.error('加载失败');
@@ -31,6 +33,27 @@ const EvaluationList: React.FC = () => {
     } catch (e) {
       console.error(e);
       message.error('删除失败');
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择要删除的记录');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // Execute deletions in parallel
+      await Promise.all(selectedRowKeys.map(key => deleteEvaluation(key as string)));
+      message.success(`成功删除 ${selectedRowKeys.length} 条记录`);
+      loadData();
+    } catch (e) {
+      console.error(e);
+      message.error('批量删除过程中出现错误');
+      loadData(); // reload to show remaining items
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -96,7 +119,7 @@ const EvaluationList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_, record: EvaluationRecord) => (
+      render: (_: any, record: EvaluationRecord) => (
         <Popconfirm title="确定要删除吗？" onConfirm={() => handleDelete(record.id)} okText="确定" cancelText="取消">
           <Button type="link" danger>删除</Button>
         </Popconfirm>
@@ -105,13 +128,31 @@ const EvaluationList: React.FC = () => {
   ];
 
   return (
-    <Card title="预测评测列表">
-      <Table 
-        dataSource={data} 
-        columns={columns} 
-        rowKey="id" 
+    <Card
+      title="预测评测列表"
+      extra={
+        selectedRowKeys.length > 0 && (
+          <Popconfirm
+            title={`确定要删除选中的 ${selectedRowKeys.length} 条记录吗？`}
+            onConfirm={handleBatchDelete}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="primary" danger>批量删除</Button>
+          </Popconfirm>
+        )
+      }
+    >
+      <Table
+        dataSource={data}
+        columns={columns}
+        rowKey="id"
         loading={loading}
-        pagination={{ 
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (newSelectedRowKeys) => setSelectedRowKeys(newSelectedRowKeys),
+        }}
+        pagination={{
           position: ['bottomRight'],
           showSizeChanger: true,
           defaultPageSize: 10,

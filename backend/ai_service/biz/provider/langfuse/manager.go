@@ -82,7 +82,22 @@ func (m *LangfuseManager) doRequest(ctx context.Context, method, path string, bo
 	basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
 	req.Header.Set("Authorization", basicAuth)
 
-	return m.httpClient.Do(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for non-2xx status codes (except for GET prompt which handles it separately)
+	if resp.StatusCode >= 400 && method != "GET" {
+		defer resp.Body.Close()
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		// We can't access jsonBody here directly because it's scoped to the block above
+		// So we just print the response body
+		fmt.Printf("[Langfuse Error] Status: %d, Body: %s\n", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("langfuse api error: status=%d body=%s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return resp, nil
 }
 
 func (m *LangfuseManager) TracePrediction(ctx context.Context, stockCode string, input string, output string, metadata map[string]interface{}) string {
@@ -129,7 +144,7 @@ func (m *LangfuseManager) UpdateTrace(ctx context.Context, traceID string, input
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		
+
 		traceBody := map[string]interface{}{
 			"id":     traceID,
 			"input":  input,
@@ -143,7 +158,7 @@ func (m *LangfuseManager) UpdateTrace(ctx context.Context, traceID string, input
 	}()
 }
 
-func (m *LangfuseManager) CreateGeneration(ctx context.Context, traceID string, name, model, input, output string, metadata map[string]interface{}, startTime, endTime time.Time) {
+func (m *LangfuseManager) CreateGeneration(ctx context.Context, traceID string, name, model string, input, output interface{}, metadata map[string]interface{}, startTime, endTime time.Time) {
 	if m == nil {
 		return
 	}

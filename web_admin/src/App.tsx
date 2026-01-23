@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { Layout, Menu } from 'antd';
 import { AreaChartOutlined, DashboardOutlined } from '@ant-design/icons';
 import EvaluationList from './pages/EvaluationList';
+import MarketTrends from './pages/MarketTrends';
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -33,6 +34,11 @@ const App: React.FC = () => {
                 key: '1',
                 icon: <AreaChartOutlined />,
                 label: <Link to="/evaluations">评测管理</Link>
+              },
+              {
+                key: '2',
+                icon: <DashboardOutlined />,
+                label: <Link to="/market-trends">市场趋势</Link>
               }
             ]}
           />
@@ -43,6 +49,7 @@ const App: React.FC = () => {
             <div style={{ padding: 24, minHeight: 360 }}>
               <Routes>
                 <Route path="/evaluations" element={<EvaluationList />} />
+                <Route path="/market-trends" element={<MarketTrends />} />
                 <Route path="/" element={<EvaluationList />} />
               </Routes>
             </div>

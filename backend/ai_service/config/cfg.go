@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"stock_assistant/backend/ai_service/biz/provider/langfuse"
-	"stock_assistant/backend/ai_service/biz/provider/llm"
+	"stock_assistant/backend/ai_service/biz/provider/llm/core"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	LLMConfig *llm.FileConfig
+	LLMConfig *core.FileConfig
 	Langfuse  *langfuse.LangfuseConfig
 }
 
@@ -37,7 +37,7 @@ func Init() error {
 	}
 
 	// 1. Unmarshal LLM Config
-	llmConfig := &llm.FileConfig{}
+	llmConfig := &core.FileConfig{}
 	if err := json.Unmarshal(file, llmConfig); err != nil {
 		return fmt.Errorf("failed to unmarshal llm config: %w", err)
 	}

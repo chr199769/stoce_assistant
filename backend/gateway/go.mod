@@ -10,6 +10,7 @@ require (
 	github.com/cloudwego/hertz v0.10.3
 	github.com/cloudwego/kitex v0.15.4
 	github.com/cloudwego/kitex/pkg/protocol/bthrift v0.0.0-20260112072316-5cf426cf9e1b
+	github.com/hertz-contrib/cors v0.1.0
 )
 
 require (
@@ -31,7 +32,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20240727154555-813a5fbdbec8 // indirect
-	github.com/hertz-contrib/cors v0.1.0 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/jhump/protoreflect v1.8.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

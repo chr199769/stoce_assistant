@@ -40,7 +40,7 @@ const MarketAnalysisScreen = () => {
            <Card style={styles.card}>
             <Card.Title title="分析总结" left={(props) => <Text {...props} style={{fontSize: 24}}>📝</Text>} />
             <Card.Content>
-              <Text variant="bodyMedium">{data.analysis_summary}</Text>
+              <Text variant="bodyMedium" style={styles.summaryText}>{data.analysis_summary}</Text>
             </Card.Content>
           </Card>
         )}
@@ -62,7 +62,7 @@ const MarketAnalysisScreen = () => {
             <Card.Content>
               {data.recommended_stocks.map((stock, index) => (
                 <View key={index} style={styles.recommendItem}>
-                  <Text variant="bodyMedium">• {stock}</Text>
+                  <Text variant="bodyMedium" style={styles.recommendText}>{stock}</Text>
                 </View>
               ))}
             </Card.Content>
@@ -74,7 +74,10 @@ const MarketAnalysisScreen = () => {
             <Card.Title title="机会展望" left={(props) => <Text {...props} style={{fontSize: 24}}>🚀</Text>} />
             <Card.Content>
               {data.opportunities.map((opp, index) => (
-                <Text key={index} variant="bodyMedium" style={styles.oppItem}>• {opp}</Text>
+                <View key={index} style={styles.oppContainer}>
+                  <Text style={styles.bullet}>•</Text>
+                  <Text variant="bodyMedium" style={styles.oppItem}>{opp}</Text>
+                </View>
               ))}
             </Card.Content>
           </Card>
@@ -85,7 +88,10 @@ const MarketAnalysisScreen = () => {
             <Card.Title title="风险提示" left={(props) => <Text {...props} style={{fontSize: 24}}>⚠️</Text>} />
             <Card.Content>
               {data.risks.map((risk, index) => (
-                <Text key={index} variant="bodyMedium" style={styles.riskItem}>• {risk}</Text>
+                <View key={index} style={styles.riskContainer}>
+                  <Text style={styles.bullet}>•</Text>
+                  <Text variant="bodyMedium" style={styles.riskItem}>{risk}</Text>
+                </View>
               ))}
             </Card.Content>
           </Card>
@@ -161,16 +167,45 @@ const styles = StyleSheet.create({
   },
   recommendItem: {
     marginBottom: 8,
-    padding: 8,
-    backgroundColor: '#FFF9C4', // Light yellow for recommendations
-    borderRadius: 4,
+    padding: 12,
+    backgroundColor: '#FFF3E0', // Warmer background for recommendations
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9800',
+  },
+  recommendText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#333',
+  },
+  summaryText: {
+    lineHeight: 24,
+    color: '#424242',
+  },
+  oppContainer: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    alignItems: 'flex-start',
+  },
+  riskContainer: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    alignItems: 'flex-start',
+  },
+  bullet: {
+    marginRight: 8,
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#757575',
   },
   oppItem: {
-    marginBottom: 4,
+    flex: 1,
+    lineHeight: 22,
     color: '#2E7D32', // Green for opportunities
   },
   riskItem: {
-    marginBottom: 4,
+    flex: 1,
+    lineHeight: 22,
     color: '#D32F2F', // Red for risks
   },
 });

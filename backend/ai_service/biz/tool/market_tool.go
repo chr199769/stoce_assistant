@@ -2,14 +2,13 @@ package tool
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"stock_assistant/backend/ai_service/biz/rpc"
+	"stock_assistant/backend/ai_service/kitex_gen/stock"
 	eastmoney "stock_assistant/backend/common/eastmoney"
 )
 
@@ -131,66 +130,6 @@ func (t *DragonTigerTool) Call(ctx context.Context, input string) (string, error
 	return sb.String(), nil
 }
 
-// SinaNewsResponse matches Sina 7x24 API
-type SinaNewsResponse struct {
-	Result struct {
-		Status struct {
-			Code int    `json:"code"`
-			Msg  string `json:"msg"`
-		} `json:"status"`
-		Data struct {
-			Feed struct {
-				List []struct {
-					RichText   string `json:"rich_text"`
-					CreateTime string `json:"create_time"`
-					DocUrl     string `json:"doc_url"`
-				} `json:"list"`
-			} `json:"feed"`
-		} `json:"data"`
-	} `json:"result"`
-}
-
-// GetMarketNews fetches general market news (kuaixun) using Sina 7x24 API (more reliable)
-func GetMarketNews() ([]string, error) {
-	url := "https://zhibo.sina.com.cn/api/zhibo/feed?page=1&page_size=50&zhibo_id=152"
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var sinaResp SinaNewsResponse
-	if err := json.Unmarshal(body, &sinaResp); err != nil {
-		return nil, fmt.Errorf("json 解析错误: %v", err)
-	}
-
-	if sinaResp.Result.Status.Code != 0 {
-		return nil, fmt.Errorf("api 错误: %s", sinaResp.Result.Status.Msg)
-	}
-
-	var news []string
-	for _, item := range sinaResp.Result.Data.Feed.List {
-		// Clean text (Sina rich_text might have HTML or special chars)
-		text := item.RichText
-		// Basic cleaning if needed, usually it's plain text or minimal HTML
-		news = append(news, fmt.Sprintf("[%s] %s", item.CreateTime, text))
-	}
-	return news, nil
-}
-
 func (t *MarketInfoTool) Name() string {
 	return "MarketInfo"
 }
@@ -239,57 +178,43 @@ func (t *MarketInfoTool) Call(ctx context.Context, input string) (string, error)
 
 	// 2. 社交趋势 (宏观情绪)
 	sb.WriteString("=== 社交趋势 (宏观情绪) ===\n")
-	trends, err := GetAllTrends()
-	if err != nil {
-		sb.WriteString(fmt.Sprintf("获取趋势失败: %v\n", err))
+	trendReq := &stock.GetMarketTrendsRequest{
+		Page:     1,
+		PageSize: 100, // 获取更多趋势用于分析
+		Sort:     "weight_desc",
+	}
+	if stockCode != "" {
+		trendReq.RelatedStockId = stockCode
+	}
+
+	if rpc.StockClient == nil {
+		sb.WriteString("Stock Service 未初始化，无法获取趋势。\n")
 	} else {
-		// If input is specific stock, try to filter trends relevant to it?
-		// Or just show top trends briefly?
-		// Let's show all trends but maybe truncated if too long?
-		// GetAllTrends returns a LOT of text.
-		// Let's just append it. The LLM can handle it.
-		sb.WriteString(trends)
+		trendResp, err := rpc.StockClient.GetMarketTrends(ctx, trendReq)
+		if err != nil {
+			sb.WriteString(fmt.Sprintf("获取趋势失败: %v\n", err))
+		} else {
+			if len(trendResp.Trends) == 0 {
+				if stockCode != "" {
+					sb.WriteString(fmt.Sprintf("暂无与 %s 相关的趋势数据。\n", stockCode))
+				} else {
+					sb.WriteString("暂无趋势数据。\n")
+				}
+			}
+
+			// Previously sorted manually here, now sorting is handled by DB via API parameter.
+
+			for i, trend := range trendResp.Trends {
+				sb.WriteString(fmt.Sprintf("%d. [%s] %s (相关性:%d, 权重:%.1f): %s\n",
+					i+1, trend.ImpactType, trend.Title, trend.FinancialRelevance, trend.Weight, trend.Summary))
+			}
+		}
 	}
 	sb.WriteString("\n")
 
-	// 3. 一般市场新闻与政策
-	sb.WriteString("=== 一般市场与政策新闻 ===\n")
-	marketNews, err := GetMarketNews()
-	if err != nil {
-		sb.WriteString(fmt.Sprintf("获取市场新闻失败: %v\n", err))
-	} else {
-		// Filter logic
-		keywords := []string{"马斯克", "特朗普", "政策", "行业", "板块", "Musk", "Trump", "央行", "证监会", "国务院"}
-		// If stock code provided, maybe add it to keywords?
-		if stockCode != "" {
-			keywords = append(keywords, stockCode)
-		}
-
-		var relevantNews []string
-		for _, news := range marketNews {
-			for _, kw := range keywords {
-				if strings.Contains(news, kw) {
-					relevantNews = append(relevantNews, news)
-					break
-				}
-			}
-		}
-
-		if len(relevantNews) > 0 {
-			sb.WriteString("发现相关/重要新闻:\n")
-			for _, n := range relevantNews {
-				sb.WriteString(fmt.Sprintf("- %s\n", n))
-			}
-		} else {
-			sb.WriteString("在前 50 条快讯中未发现关键人物/政策的具体提及。显示前 5 条一般新闻:\n")
-			for i, n := range marketNews {
-				if i >= 5 {
-					break
-				}
-				sb.WriteString(fmt.Sprintf("- %s\n", n))
-			}
-		}
-	}
+	// 3. 一般市场新闻与政策 (已集成到市场趋势中)
+	// 此处无需再次抓取，因为 Stock Service 已经合并了快讯和新闻，并进行了分析
+	// 但为了用户体验，如果趋势数据很少，可以在这里提示用户
 
 	return sb.String(), nil
 }

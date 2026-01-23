@@ -5,6 +5,7 @@ import (
 	"net"
 	"stock_assistant/backend/ai_service/biz/provider/langfuse"
 	"stock_assistant/backend/ai_service/biz/provider/prompt"
+	ai_rpc "stock_assistant/backend/ai_service/biz/rpc"
 	"stock_assistant/backend/ai_service/config"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai/aiservice"
 
@@ -31,6 +32,7 @@ func main() {
 
 	// 初始化提示词管理器
 	prompt.Init(langfuse.GetLangfuse())
+	ai_rpc.Init()
 
 	addr, _ := net.ResolveTCPAddr("tcp", ":8889")
 	svr := ai.NewServer(NewAIServiceImpl(config.Get().LLMConfig), server.WithServiceAddr(addr))
