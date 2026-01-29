@@ -298,7 +298,6 @@ func (p *Provider) collectPredictionContext(ctx context.Context, stockCode strin
 		}
 	}
 	log.Printf("fractal len=%d", len(fractalAnalysisContext))
-
 	return predictionContext{
 		stockData:              stockData,
 		marketInfo:             marketInfo,
@@ -344,6 +343,50 @@ func buildIntradaySummary(ctx context.Context, stockCode string, isTrading bool)
 	var totalChange float64
 	var latestDate string
 	var latestSummary string
+	// 辅助函数：解析分钟时间
+	getHM := func(s string) string {
+		if len(s) >= 16 {
+			return s[11:16]
+		}
+		return ""
+	}
+	// 辅助函数：计算区间趋势
+	sectionTrend := func(items []*eastmoney.KlineItem) (string, float64) {
+		if len(items) < 2 {
+			return "平稳", 0
+		}
+		start := items[0].Close
+		end := items[len(items)-1].Close
+		if start == 0 {
+			return "平稳", 0
+		}
+		pct := (end - start) / start * 100
+		trend := "震荡"
+		if pct > 0.4 {
+			trend = "上升"
+		} else if pct < -0.4 {
+			trend = "下跌"
+		}
+		return trend, pct
+	}
+	// 辅助函数：最大回撤
+	maxDrawdown := func(items []*eastmoney.KlineItem) float64 {
+		maxP := -1.0
+		maxDD := 0.0
+		for _, it := range items {
+			p := it.Close
+			if p > maxP {
+				maxP = p
+			}
+			if maxP > 0 {
+				dd := (p - maxP) / maxP * 100
+				if dd < maxDD {
+					maxDD = dd
+				}
+			}
+		}
+		return math.Abs(maxDD)
+	}
 	for _, date := range order {
 		items := grouped[date]
 		if len(items) == 0 {
@@ -380,7 +423,11 @@ func buildIntradaySummary(ctx context.Context, stockCode string, isTrading bool)
 		} else if changePct < -0.5 {
 			status = "偏弱"
 		}
-		summary := fmt.Sprintf("%s: 开盘%.2f 收盘%.2f 高%.2f 低%.2f 涨跌%.2f%% 量能%.0f万股 走势%s", date, open, close, high, low, changePct, float64(volume)/10000, status)
+		amplitude := 0.0
+		if open > 0 {
+			amplitude = (high - low) / open * 100
+		}
+		summary := fmt.Sprintf("%s: 开盘%.2f 收盘%.2f 高%.2f 低%.2f 涨跌%.2f%% 振幅%.2f%% 量能%.0f万股 走势%s", date, open, close, high, low, changePct, amplitude, float64(volume)/10000, status)
 		daySummaries = append(daySummaries, summary)
 		latestDate = date
 		latestSummary = summary
@@ -398,7 +445,63 @@ func buildIntradaySummary(ctx context.Context, stockCode string, isTrading bool)
 	avgVolume := float64(totalVolume) / float64(len(daySummaries)) / 10000
 	latestStatus := latestTradingStatus(isTrading, latestDate)
 	overall := fmt.Sprintf("近3日整体分时表现: 趋势%s，平均涨跌%.2f%%，日均量能%.0f万股", overallTrend, avgChange, avgVolume)
-	return fmt.Sprintf("%s\n最新交易日(%s, %s)表现: %s\n明细:\n- %s", overall, latestDate, latestStatus, latestSummary, strings.Join(daySummaries, "\n- ")), latestDate
+	// 最新交易日的细化走势
+	todayItems := grouped[latestDate]
+	var vwap float64
+	var volSum int64
+	for _, it := range todayItems {
+		vwap += it.Close * float64(it.Volume)
+		volSum += it.Volume
+	}
+	if volSum > 0 {
+		vwap = vwap / float64(volSum)
+	}
+	// 早盘与午后拆分
+	var morning []*eastmoney.KlineItem
+	var afternoon []*eastmoney.KlineItem
+	for _, it := range todayItems {
+		hm := getHM(it.Date)
+		if hm == "" {
+			continue
+		}
+		if hm <= "11:30" {
+			morning = append(morning, it)
+		} else if hm >= "13:00" {
+			afternoon = append(afternoon, it)
+		}
+	}
+	mTrend, mPct := sectionTrend(morning)
+	aTrend, aPct := sectionTrend(afternoon)
+	// 尾盘强弱：最后30分钟
+	tailN := 30
+	if tailN > len(todayItems) {
+		tailN = len(todayItems)
+	}
+	tail := todayItems[len(todayItems)-tailN:]
+	tTrend, tPct := sectionTrend(tail)
+	// 最大回撤
+	dd := maxDrawdown(todayItems)
+	// 量能峰值时段 Top3
+	type pair struct {
+		hm  string
+		vol int64
+	}
+	var pairs []pair
+	for _, it := range todayItems {
+		pairs = append(pairs, pair{hm: getHM(it.Date), vol: it.Volume})
+	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].vol > pairs[j].vol })
+	top := 3
+	if top > len(pairs) {
+		top = len(pairs)
+	}
+	var peaks []string
+	for i := 0; i < top; i++ {
+		peaks = append(peaks, pairs[i].hm)
+	}
+	detail := fmt.Sprintf("当天趋势: 早盘%s(%.2f%%) 午后%s(%.2f%%) 尾盘%s(%.2f%%); VWAP=%.2f; 最大回撤=%.2f%%; 量能峰值时段: %s",
+		mTrend, mPct, aTrend, aPct, tTrend, tPct, vwap, dd, strings.Join(peaks, ", "))
+	return fmt.Sprintf("%s\n最新交易日(%s, %s)表现: %s\n%s\n明细:\n- %s", overall, latestDate, latestStatus, latestSummary, detail, strings.Join(daySummaries, "\n- ")), latestDate
 }
 
 func latestTradingStatus(isTrading bool, latestDate string) string {

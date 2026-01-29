@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"stock_assistant/backend/ai_service/biz/provider/llm/core"
 	"stock_assistant/backend/ai_service/biz/provider/prompt"
+	"stock_assistant/backend/ai_service/biz/tool"
 	"stock_assistant/backend/common/langfuse"
 
 	"github.com/tmc/langchaingo/llms"
@@ -35,6 +37,120 @@ type CoordinatorInput struct {
 	Results       []AgentRunResult `json:"results"`
 }
 
+func extractAnomalySignals(stockData string) string {
+	data := strings.ToLower(stockData)
+	change := 0.0
+	volume := int64(0)
+	if idx := strings.Index(data, "涨跌幅"); idx != -1 {
+		s := data[idx:]
+		if p := strings.Index(s, ":"); p != -1 {
+			s = s[p+1:]
+		}
+		if q := strings.Index(s, "%"); q != -1 {
+			val := strings.TrimSpace(s[:q])
+			val = strings.Trim(val, "+ ")
+			if v, err := strconv.ParseFloat(val, 64); err == nil {
+				change = v
+			}
+		}
+	}
+	if idx := strings.Index(data, "成交量"); idx != -1 {
+		s := data[idx:]
+		if p := strings.Index(s, ":"); p != -1 {
+			s = s[p+1:]
+		}
+		val := strings.TrimSpace(s)
+		for i := 0; i < len(val); i++ {
+			if (val[i] < '0' || val[i] > '9') && val[i] != '-' {
+				val = val[:i]
+				break
+			}
+		}
+		if v, err := strconv.ParseInt(val, 10, 64); err == nil {
+			volume = v
+		}
+	}
+	var lines []string
+	if change >= 7 || change <= -7 {
+		lines = append(lines, fmt.Sprintf("日内异常波动: 涨跌幅 %.2f%%", change))
+	}
+	if (change >= 3 || change <= -3) && volume > 20000000 {
+		lines = append(lines, fmt.Sprintf("量价异动: 涨跌幅 %.2f%% 成交量 %d", change, volume))
+	}
+	if len(lines) == 0 {
+		lines = append(lines, fmt.Sprintf("波动观察: 涨跌幅 %.2f%% 成交量 %d", change, volume))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func filterRiskEvidence(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	var out []string
+	keywords := []string{"监管", "处罚", "问询", "停牌", "风险", "公告", "质押", "违约", "诉讼", "减持", "预警", "立案"}
+	match := func(l string) bool {
+		ll := strings.ToLower(l)
+		for _, k := range keywords {
+			if strings.Contains(ll, strings.ToLower(k)) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		if strings.HasPrefix(t, "事件证据:") || strings.HasPrefix(t, "关系证据:") {
+			out = append(out, t)
+			continue
+		}
+		if strings.HasPrefix(t, "- ") && match(t) {
+			out = append(out, t)
+		}
+	}
+	if len(out) == 0 {
+		return "暂无风险类证据"
+	}
+	return strings.Join(out, "\n")
+}
+
+func filterEventEvidence(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	var out []string
+	inRelations := false
+	for _, line := range lines {
+		l := strings.TrimSpace(line)
+		if l == "" {
+			continue
+		}
+		if strings.HasPrefix(l, "关系证据:") {
+			inRelations = true
+			out = append(out, "关系证据:")
+			continue
+		}
+		if strings.HasPrefix(l, "事件证据:") {
+			inRelations = false
+			out = append(out, "事件证据:")
+			continue
+		}
+		if strings.HasPrefix(l, "- ") {
+			if inRelations {
+				if strings.Contains(l, "AFFECTS") {
+					out = append(out, l)
+				}
+				continue
+			}
+			out = append(out, l)
+			continue
+		}
+		if !inRelations {
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
 func (p *Provider) runMultiAgentPrediction(ctx context.Context, llm llms.Model, stockCode string, tradingStatusStr string, stockData string, analysisData string, marketInfo string, sectorContext string, dtContext string, fractalAnalysisContext string, intradaySummary string, klineSummary string, knowledgeGraphEvidence string, lf *langfuse.LangfuseManager) (string, string, time.Time, time.Time, error) {
 	rootCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -42,13 +158,14 @@ func (p *Provider) runMultiAgentPrediction(ctx context.Context, llm llms.Model, 
 	traceID := langfuse.TraceIDFromContext(ctx)
 	timeStr := time.Now().Format("2006-01-02 15:04:05")
 	fundamentalContext := fmt.Sprintf("财务与估值信息:\n%s\n\n公司分析:\n%s\n\n行业对比:\n%s", stockData, analysisData, sectorContext)
-	eventContext := fmt.Sprintf("事件证据:\n%s\n\n市场新闻:\n%s", knowledgeGraphEvidence, marketInfo)
+	eventContext := fmt.Sprintf("%s", filterEventEvidence(knowledgeGraphEvidence))
 	technicalRules := strings.TrimSpace(prompt.GetManager().GetPrompt(rootCtx, prompt.TechnicalRules))
-	technicalContext := fmt.Sprintf("技术面数据:\n%s\n\n%s\n\n分形分析:\n%s\n\n近3日分时表现摘要:\n%s\n\n近5日K线/量价摘要:\n%s", stockData, analysisData, fractalAnalysisContext, intradaySummary, klineSummary)
+	technicalContext := fmt.Sprintf("技术面数据:\n%s\n\n分形分析:\n%s\n\n近3日分时表现摘要:\n%s\n\n近5日K线/量价摘要:\n%s", stockData, fractalAnalysisContext, intradaySummary, klineSummary)
 	if technicalRules != "" {
 		technicalContext = fmt.Sprintf("%s\n\n技术面规则库:\n%s", technicalContext, technicalRules)
 	}
-	riskContext := fmt.Sprintf("风险相关信息:\n市场信息:\n%s\n\n龙虎榜:\n%s\n\n事件证据:\n%s", marketInfo, dtContext, knowledgeGraphEvidence)
+	riskSignals := tool.CheckRiskControlRules(rootCtx, stockCode)
+	riskContext := fmt.Sprintf("风险相关信息:\n%s\n\n公告/监管证据:\n%s\n\n龙虎榜:\n%s", riskSignals, filterRiskEvidence(knowledgeGraphEvidence), dtContext)
 
 	type agentCall struct {
 		role      string
@@ -86,18 +203,33 @@ func (p *Provider) runMultiAgentPrediction(ctx context.Context, llm llms.Model, 
 		raw := ""
 		if err == nil && resp != nil && len(resp.Choices) > 0 {
 			raw = resp.Choices[0].Content
+			if lf != nil && traceID != "" {
+				lf.Span(agentCtx, traceID, nil, "Node:"+strings.ReplaceAll(call.role, "智能体", "Agent"), promptStr, raw, start, end)
+			}
+			output, parseErr := parseAgentOutput(raw)
+			if parseErr != nil {
+				results = append(results, AgentRunResult{Role: call.role, Error: parseErr.Error(), Raw: raw, Output: AgentOutput{Direction: "neutral", Confidence: 0.1, Summary: "解析失败", Evidence: []string{}}})
+				agentCancel()
+				continue
+			}
+			results = append(results, AgentRunResult{Role: call.role, Output: output, Raw: raw})
+			agentCancel()
+			continue
+		}
+		if err != nil {
+			if lf != nil && traceID != "" {
+				lf.Span(agentCtx, traceID, nil, "Node:"+strings.ReplaceAll(call.role, "智能体", "Agent"), promptStr, `{"direction":"neutral","confidence":0.1,"summary":"生成失败","evidence":[]}`, start, end)
+			}
+			results = append(results, AgentRunResult{Role: call.role, Error: err.Error(), Raw: `{"direction":"neutral","confidence":0.1,"summary":"生成失败","evidence":[]}`, Output: AgentOutput{Direction: "neutral", Confidence: 0.1, Summary: "生成失败", Evidence: []string{}}})
+			agentCancel()
+			continue
 		}
 		if lf != nil && traceID != "" {
 			lf.Span(agentCtx, traceID, nil, "Node:"+strings.ReplaceAll(call.role, "智能体", "Agent"), promptStr, raw, start, end)
 		}
-		if err != nil {
-			results = append(results, AgentRunResult{Role: call.role, Error: err.Error(), Raw: raw})
-			agentCancel()
-			continue
-		}
 		output, parseErr := parseAgentOutput(raw)
 		if parseErr != nil {
-			results = append(results, AgentRunResult{Role: call.role, Error: parseErr.Error(), Raw: raw})
+			results = append(results, AgentRunResult{Role: call.role, Error: parseErr.Error(), Raw: raw, Output: AgentOutput{Direction: "neutral", Confidence: 0.1, Summary: "解析失败", Evidence: []string{}}})
 			agentCancel()
 			continue
 		}
