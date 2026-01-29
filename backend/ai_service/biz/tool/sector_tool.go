@@ -9,17 +9,19 @@ import (
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
 	"stock_assistant/backend/ai_service/kitex_gen/stock/stockservice"
 	eastmoney "stock_assistant/backend/common/eastmoney"
+	eimpl "stock_assistant/backend/common/provider/impl/eastmoney"
+	"stock_assistant/backend/common/provider"
 )
 
 type SectorTool struct {
 	Client          stockservice.Client
-	EastMoneyClient *eastmoney.Client
+	SectorClient    provider.SectorClient
 }
 
 func NewSectorTool(client stockservice.Client) *SectorTool {
 	return &SectorTool{
 		Client:          client,
-		EastMoneyClient: eastmoney.NewClient(),
+		SectorClient:    eimpl.NewSector(eastmoney.NewClient()),
 	}
 }
 
@@ -47,14 +49,11 @@ func (t *SectorTool) Call(ctx context.Context, input string) (string, error) {
 }
 
 func (t *SectorTool) GetSectorDetail(ctx context.Context, sectorCode string) (string, error) {
-	// 1. 获取股票原始数据
-	rawStocks, err := t.EastMoneyClient.GetSectorStocksRaw(ctx, sectorCode)
+	rawStocks, err := t.SectorClient.GetSectorStocks(ctx, sectorCode)
 	if err != nil {
 		return fmt.Sprintf("获取板块股票失败: %v", err), nil
 	}
 
-	// 2. 龙头选择逻辑
-	// 过滤 ST 和新股
 	var candidates []*eastmoney.SectorStockItem
 	for _, item := range rawStocks {
 		if strings.Contains(item.Name, "ST") || strings.Contains(item.Name, "退") {
@@ -63,28 +62,18 @@ func (t *SectorTool) GetSectorDetail(ctx context.Context, sectorCode string) (st
 		if strings.HasPrefix(item.Name, "N") || strings.HasPrefix(item.Name, "C") {
 			continue
 		}
-		candidates = append(candidates, item)
+		candidates = append(candidates, &eastmoney.SectorStockItem{
+			Code: item.Code,
+			Name: item.Name,
+		})
 	}
-
-	// 计算得分: 0.6*成交额 + 0.4*市值 (作为影响力的简化代理)
-	// 或者更好: 直接按成交额排序，这表示流动性和关注度
-	// 让我们使用成交额作为“主力”关注的主要因素
-	// 并检查涨停状态
-
-	// 按成交额降序排序
-	// 为了简单起见使用冒泡排序（列表很小 < 100），或者直接遍历查找最大值
-	// Go 的 sort 需要引入 sort 包
-
-	// 我们将只返回成交额前 5 名，确保沪深两市混合
-	// 由于不想轻易引入 sort 包而更新 imports，我们实现简单的选择逻辑
 
 	leaders := t.selectLeaders(candidates)
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("板块龙头 (影响力前 5):\n"))
 	for _, l := range leaders {
-		sb.WriteString(fmt.Sprintf("- %s (%s): %.2f%%, 成交额: %.1f亿\n",
-			l.Name, l.Code, l.ChangePercent, l.Amount/100000000))
+		sb.WriteString(fmt.Sprintf("- %s (%s)\n", l.Name, l.Code))
 	}
 
 	return sb.String(), nil
@@ -161,6 +150,11 @@ func (t *SectorTool) getSectorRank(ctx context.Context, rankType string) (string
 	for i, s := range resp.Sectors {
 		sb.WriteString(fmt.Sprintf("%d. %s: %.2f%% (净流入: %.2f 万), 领涨股: %s\n",
 			i+1, s.Name, s.ChangePercent, s.NetInflow/10000, s.TopStockName))
+	}
+	limitUp, err := t.getLimitUpPool(ctx)
+	if err == nil && strings.TrimSpace(limitUp) != "" {
+		sb.WriteString("\n[市场情绪·涨停池]\n")
+		sb.WriteString(strings.TrimSpace(limitUp))
 	}
 	return sb.String(), nil
 }

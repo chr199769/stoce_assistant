@@ -3,7 +3,9 @@ go 1.24.11
 use (
 	./backend/ai_service
 	./backend/gateway
+	./backend/knowledge_graph
 	./backend/stock_service
 	./backend/verify_client
 	./backend/common
+	./backend/akshare_service
 )

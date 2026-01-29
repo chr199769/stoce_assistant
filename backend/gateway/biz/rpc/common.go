@@ -1,19 +1,13 @@
 package rpc
 
 import (
-	"os"
 	"time"
 
 	"github.com/cloudwego/kitex/client"
 )
 
 // getClientOptions returns the common client options for RPC clients
-func getClientOptions(envVarName, defaultAddr string) []client.Option {
-	addr := os.Getenv(envVarName)
-	if addr == "" {
-		addr = defaultAddr
-	}
-
+func getClientOptions(addr string) []client.Option {
 	return []client.Option{
 		client.WithHostPorts(addr),
 		client.WithConnectTimeout(3 * time.Second),

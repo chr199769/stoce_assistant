@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { Appbar, Card, Text, Divider, Chip, Button, ActivityIndicator } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { getRealtime, marketReview, getMarketSectors } from '../api/stock';
@@ -9,7 +9,7 @@ import { PieChart } from 'react-native-chart-kit';
 const SummaryScreen = () => {
   const navigation = useNavigation();
   const [indices, setIndices] = useState<RealtimeResponse[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
   const [review, setReview] = useState<MarketReviewResponse | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [sectors, setSectors] = useState<SectorInfo[]>([]);

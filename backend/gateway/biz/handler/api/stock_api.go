@@ -702,122 +702,17 @@ func DeleteEvaluation(ctx context.Context, c *app.RequestContext) {
 // GetMarketTrends .
 // @router /api/market/trends [GET]
 func GetMarketTrends(ctx context.Context, c *app.RequestContext) {
-	var err error
-	var req api.GetMarketTrendsRequest
-	err = c.BindAndValidate(&req)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-
-	rpcReq := &stock.GetMarketTrendsRequest{
-		Page:           req.Page,
-		PageSize:       req.PageSize,
-		ImpactType:     req.ImpactType,
-		RelatedStockId: req.RelatedStockID,
-		Query:          req.Query,
-		Sort:           req.Sort,
-	}
-
-	rpcResp, err := rpc.StockClient.GetMarketTrends(ctx, rpcReq)
-	if err != nil {
-		c.String(consts.StatusInternalServerError, err.Error())
-		return
-	}
-
-	resp := &api.GetMarketTrendsResponse{
-		Trends: make([]*api.MarketTrend, 0),
-		Total:  rpcResp.Total,
-	}
-
-	for _, t := range rpcResp.Trends {
-		resp.Trends = append(resp.Trends, &api.MarketTrend{
-			ID:                 t.Id,
-			Source:             t.Source,
-			Title:              t.Title,
-			Summary:            t.Summary,
-			OriginalURL:        t.OriginalUrl,
-			FinancialRelevance: t.FinancialRelevance,
-			RelatedSectors:     t.RelatedSectors,
-			RelatedStocks:      t.RelatedStocks,
-			ImpactAnalysis:     t.ImpactAnalysis,
-			SentimentScore:     t.SentimentScore,
-			ImpactType:         t.ImpactType,
-			ImpactScope:        t.ImpactScope,
-			Weight:             t.Weight,
-			IsStillValid:       t.IsStillValid,
-			CreatedAt:          t.CreatedAt,
-			UpdatedAt:          t.UpdatedAt,
-		})
-	}
-
-	c.JSON(consts.StatusOK, resp)
+	c.String(consts.StatusGone, "市场趋势接口已下线")
 }
 
 // UpdateMarketTrend .
 // @router /api/market/trends/update [POST]
 func UpdateMarketTrend(ctx context.Context, c *app.RequestContext) {
-	var err error
-	var req api.UpdateMarketTrendRequest
-	err = c.BindAndValidate(&req)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-
-	if req.Trend == nil {
-		c.String(consts.StatusBadRequest, "Missing trend data")
-		return
-	}
-
-	rpcReq := &stock.UpdateMarketTrendRequest{
-		Trend: &stock.MarketTrend{
-			Id:                 req.Trend.ID,
-			Source:             req.Trend.Source,
-			Title:              req.Trend.Title,
-			Summary:            req.Trend.Summary,
-			OriginalUrl:        req.Trend.OriginalURL,
-			FinancialRelevance: req.Trend.FinancialRelevance,
-			RelatedSectors:     req.Trend.RelatedSectors,
-			RelatedStocks:      req.Trend.RelatedStocks,
-			ImpactAnalysis:     req.Trend.ImpactAnalysis,
-			SentimentScore:     req.Trend.SentimentScore,
-			ImpactType:         req.Trend.ImpactType,
-			ImpactScope:        req.Trend.ImpactScope,
-			Weight:             req.Trend.Weight,
-			IsStillValid:       req.Trend.IsStillValid,
-		},
-	}
-
-	rpcResp, err := rpc.StockClient.UpdateMarketTrend(ctx, rpcReq)
-	if err != nil {
-		c.String(consts.StatusInternalServerError, err.Error())
-		return
-	}
-
-	c.JSON(consts.StatusOK, &api.UpdateMarketTrendResponse{Success: rpcResp.Success})
+	c.String(consts.StatusGone, "市场趋势接口已下线")
 }
 
 // DeleteMarketTrend .
 // @router /api/market/trends/:id [DELETE]
 func DeleteMarketTrend(ctx context.Context, c *app.RequestContext) {
-	var err error
-	var req api.DeleteMarketTrendRequest
-	err = c.BindAndValidate(&req)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-
-	rpcReq := &stock.DeleteMarketTrendRequest{
-		Id: req.ID,
-	}
-
-	rpcResp, err := rpc.StockClient.DeleteMarketTrend(ctx, rpcReq)
-	if err != nil {
-		c.String(consts.StatusInternalServerError, err.Error())
-		return
-	}
-
-	c.JSON(consts.StatusOK, &api.DeleteMarketTrendResponse{Success: rpcResp.Success})
+	c.String(consts.StatusGone, "市场趋势接口已下线")
 }

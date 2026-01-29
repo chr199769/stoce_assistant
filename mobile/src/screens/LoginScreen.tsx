@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { StyleSheet, Alert } from 'react-native';
 import { Button, TextInput, Title, Text, Surface } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +19,7 @@ const LoginScreen = () => {
     try {
       await login(username);
       // Navigation will be handled by the navigator based on auth state
-    } catch (error) {
+    } catch {
       Alert.alert('Login Failed', 'Could not connect to server or create user.');
     } finally {
       setLoading(false);

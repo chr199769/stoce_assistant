@@ -18,16 +18,16 @@ type Client struct {
 func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 20 * time.Second,
 		},
 	}
 }
 
 func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < 5; attempt++ {
 		if attempt > 0 {
-			time.Sleep(time.Duration(attempt) * 300 * time.Millisecond)
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
 		}
 
 		clonedReq := req.Clone(req.Context())
@@ -72,6 +72,9 @@ func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 
 func isRetryableError(err error) bool {
 	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
 	var netErr net.Error
@@ -228,25 +231,131 @@ func (c *Client) GetSectorRank(ctx context.Context, rankType string, limit int) 
 	return sectors, nil
 }
 
+type SectorListResponse struct {
+	Rc   int `json:"rc"`
+	Data *struct {
+		Total int `json:"total"`
+		Diff  []struct {
+			Code string `json:"f12"`
+			Name string `json:"f14"`
+		} `json:"diff"`
+	} `json:"data"`
+}
+
+func (c *Client) GetSectorList(ctx context.Context, sectorType string) ([]*SectorInfo, error) {
+	fs := "m:90%2Bt:3%2Bf:!50"
+	if sectorType == "industry" {
+		fs = "m:90%2Bt:2%2Bf:!50"
+	}
+
+	page := 1
+	pageSize := 200
+	var sectors []*SectorInfo
+	for {
+		url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=%d&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14", page, pageSize, fs)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := c.doRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		var result SectorListResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, err
+		}
+		if result.Data == nil || len(result.Data.Diff) == 0 {
+			break
+		}
+		for _, item := range result.Data.Diff {
+			sectors = append(sectors, &SectorInfo{
+				Code: item.Code,
+				Name: item.Name,
+			})
+		}
+		if page*pageSize >= result.Data.Total {
+			break
+		}
+		page++
+	}
+	return sectors, nil
+}
+
+type aShareListResponse struct {
+	Data *struct {
+		Total int `json:"total"`
+		Diff  []struct {
+			Code string `json:"f12"`
+			Name string `json:"f14"`
+		} `json:"diff"`
+	} `json:"data"`
+}
+
+func (c *Client) GetAStockList(ctx context.Context) ([]*AStockItem, error) {
+	fs := "m:0+t:6,m:0+t:13,m:0+t:80,m:1+t:2,m:1+t:23"
+	page := 1
+	pageSize := 200
+	var stocks []*AStockItem
+	for {
+		url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=%d&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14", page, pageSize, fs)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := c.doRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		var result aShareListResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, err
+		}
+		if result.Data == nil || len(result.Data.Diff) == 0 {
+			break
+		}
+		for _, item := range result.Data.Diff {
+			stocks = append(stocks, &AStockItem{
+				Code: item.Code,
+				Name: item.Name,
+			})
+		}
+		if page*pageSize >= result.Data.Total {
+			break
+		}
+		page++
+	}
+	return stocks, nil
+}
+
 type SectorStocksResponse struct {
 	Rc   int `json:"rc"`
 	Data *struct {
 		Total int `json:"total"`
 		Diff  []struct {
-			Code          string  `json:"f12"`
-			Name          string  `json:"f14"`
-			Price         float64 `json:"f2"`
-			ChangePercent float64 `json:"f3"`
-			Volume        int64   `json:"f5"`
-			Amount        float64 `json:"f6"`
-			MarketCap     float64 `json:"f20"`
+			Code string `json:"f12"`
+			Name string `json:"f14"`
 		} `json:"diff"`
 	} `json:"data"`
 }
 
 func (c *Client) GetSectorStocksRaw(ctx context.Context, sectorCode string) ([]*SectorStockItem, error) {
 	fs := fmt.Sprintf("b:%s", sectorCode)
-	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f5,f6,f20", fs)
+	url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14", fs)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -276,18 +385,112 @@ func (c *Client) GetSectorStocksRaw(ctx context.Context, sectorCode string) ([]*
 	var stocks []*SectorStockItem
 	for _, item := range result.Data.Diff {
 		stocks = append(stocks, &SectorStockItem{
-			Code:          item.Code,
-			Name:          item.Name,
-			Price:         item.Price,
-			ChangePercent: item.ChangePercent,
-			Volume:        item.Volume,
-			Amount:        item.Amount,
-			MarketCap:     item.MarketCap,
+			Code: item.Code,
+			Name: item.Name,
 		})
 	}
 	return stocks, nil
 }
 
+func (c *Client) GetSectorStocksAll(ctx context.Context, sectorCode string) ([]*SectorStockItem, error) {
+  fs := fmt.Sprintf("b:%s", sectorCode)
+  page := 1
+  pageSize := 200
+  var stocks []*SectorStockItem
+  for {
+    url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=%d&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14", page, pageSize, fs)
+    req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+    if err != nil {
+      return nil, err
+    }
+    resp, err := c.doRequest(req)
+    if err != nil {
+      return nil, err
+    }
+    body, err := io.ReadAll(resp.Body)
+    resp.Body.Close()
+    if err != nil {
+      return nil, err
+    }
+    var result SectorStocksResponse
+    if err := json.Unmarshal(body, &result); err != nil {
+      return nil, err
+    }
+    if result.Data == nil || len(result.Data.Diff) == 0 {
+      break
+    }
+    for _, item := range result.Data.Diff {
+      stocks = append(stocks, &SectorStockItem{Code: item.Code, Name: item.Name})
+    }
+    if page*pageSize >= result.Data.Total {
+      break
+    }
+    page++
+  }
+  return stocks, nil
+}
+
+type SectorStocksDetailResponse struct {
+	Rc   int `json:"rc"`
+	Data *struct {
+		Total int `json:"total"`
+		Diff  []struct {
+			Code       string  `json:"f12"`
+			Name       string  `json:"f14"`
+			Price      float64 `json:"f2"`
+			ChangePct  float64 `json:"f3"`
+			Volume     int64   `json:"f5"`
+			Amount     float64 `json:"f6"`
+			MarketCap  float64 `json:"f20"`
+		} `json:"diff"`
+	} `json:"data"`
+}
+
+func (c *Client) GetSectorStocksDetail(ctx context.Context, sectorCode string) ([]*SectorStockItem, error) {
+	fs := fmt.Sprintf("b:%s", sectorCode)
+	page := 1
+	pageSize := 200
+	var stocks []*SectorStockItem
+	for {
+		url := fmt.Sprintf("https://push2.eastmoney.com/api/qt/clist/get?pn=%d&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f5,f6,f20", page, pageSize, fs)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.doRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		var result SectorStocksDetailResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, err
+		}
+		if result.Data == nil || len(result.Data.Diff) == 0 {
+			break
+		}
+		for _, d := range result.Data.Diff {
+			stocks = append(stocks, &SectorStockItem{
+				Code:          d.Code,
+				Name:          d.Name,
+				Price:         d.Price,
+				ChangePercent: d.ChangePct,
+				Volume:        d.Volume,
+				Amount:        d.Amount,
+				MarketCap:     d.MarketCap,
+			})
+		}
+		if page*pageSize >= result.Data.Total {
+			break
+		}
+		page++
+	}
+	return stocks, nil
+}
 type DragonTigerListResponse struct {
 	Success bool `json:"success"`
 	Result  struct {

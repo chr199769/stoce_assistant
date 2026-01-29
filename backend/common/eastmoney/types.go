@@ -36,6 +36,11 @@ type SectorStockItem struct {
 	MarketCap     float64
 }
 
+type AStockItem struct {
+	Code string
+	Name string
+}
+
 // DragonTigerItem represents a stock on the Dragon Tiger List
 type DragonTigerItem struct {
 	Date          string
@@ -123,6 +128,20 @@ type IndustryIndexData struct {
 	IndustryName string
 	RegionName   string
 	ConceptNames string
+}
+
+// RealtimeQuoteData 表示东财实时行情主要字段
+type RealtimeQuoteData struct {
+	Code       string
+	Name       string
+	Current    float64
+	PrevClose  float64
+	Open       float64
+	High       float64
+	Low        float64
+	Volume     int64
+	Amount     float64
+	Timestamp  string
 }
 
 // String methods for formatting

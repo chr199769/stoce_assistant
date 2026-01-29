@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl, ScrollView } from 'react-native';
-import { Text, Card, ActivityIndicator, Appbar, Chip, Divider, Surface } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { Text, Card, ActivityIndicator, Appbar, Chip, Divider } from 'react-native-paper';
 import { getDragonTigerList } from '../api/stock';
 import { DragonTigerItem, DragonTigerSeat } from '../types';
 
 const DragonTigerScreen = () => {
-  const navigation = useNavigation();
   const [items, setItems] = useState<DragonTigerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -14,9 +12,9 @@ const DragonTigerScreen = () => {
   
   // Date handling: default to today (simplified, assumes backend handles empty date)
   // In a real app, adding a DatePicker would be good.
-  const [date, setDate] = useState(''); 
+  const [date, _setDate] = useState(''); 
 
-  const fetchList = async () => {
+  const fetchList = useCallback(async () => {
     try {
       setError(null);
       const data = await getDragonTigerList(date);
@@ -28,11 +26,11 @@ const DragonTigerScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [date]);
 
   useEffect(() => {
     fetchList();
-  }, [date]);
+  }, [fetchList]);
 
   const onRefresh = () => {
     setRefreshing(true);

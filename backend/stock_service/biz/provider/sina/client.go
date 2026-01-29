@@ -34,7 +34,7 @@ func NewClient() *Client {
 // 代码格式: sh600000, sz000001
 func (c *Client) GetStockInfo(ctx context.Context, code string) (*stock.StockInfo, error) {
 	// 自动修复代码前缀
-	code = strings.TrimSpace(code)
+	code = strings.ToLower(strings.TrimSpace(code))
 	if len(code) == 6 {
 		if strings.HasPrefix(code, "6") {
 			code = "sh" + code

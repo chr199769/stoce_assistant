@@ -3,11 +3,11 @@ package main
 import (
 	"log"
 	"net"
-	"stock_assistant/backend/ai_service/biz/provider/langfuse"
 	"stock_assistant/backend/ai_service/biz/provider/prompt"
 	ai_rpc "stock_assistant/backend/ai_service/biz/rpc"
 	"stock_assistant/backend/ai_service/config"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai/aiservice"
+	"stock_assistant/backend/common/langfuse"
 
 	"github.com/cloudwego/kitex/server"
 )
@@ -34,7 +34,12 @@ func main() {
 	prompt.Init(langfuse.GetLangfuse())
 	ai_rpc.Init()
 
-	addr, _ := net.ResolveTCPAddr("tcp", ":8889")
+	addrValue := ":8889"
+	cfg := config.Get()
+	if cfg != nil && cfg.Server != nil && cfg.Server.Addr != "" {
+		addrValue = cfg.Server.Addr
+	}
+	addr, _ := net.ResolveTCPAddr("tcp", addrValue)
 	svr := ai.NewServer(NewAIServiceImpl(config.Get().LLMConfig), server.WithServiceAddr(addr))
 
 	err := svr.Run()

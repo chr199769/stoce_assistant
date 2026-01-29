@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Appbar, TextInput, Button, Card, Text, ProgressBar, HelperText, SegmentedButtons } from 'react-native-paper';
 import { getPrediction } from '../api/stock';
@@ -6,32 +6,62 @@ import { PredictionResponse } from '../types';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import FractalChart, { FractalData } from '../components/FractalChart';
 
+const parseSummarySections = (summary: string) => {
+  const evidenceMarker = '证据摘要:';
+  const conflictMarker = '冲突说明:';
+  let main = summary || '';
+  let conflict = '';
+  if (main.includes(evidenceMarker)) {
+    const parts = main.split(evidenceMarker);
+    main = parts[0].trim();
+    const rest = parts.slice(1).join(evidenceMarker).trim();
+    if (rest.includes(conflictMarker)) {
+      const conflictParts = rest.split(conflictMarker);
+      conflict = conflictParts.slice(1).join(conflictMarker).trim();
+    }
+  } else if (main.includes(conflictMarker)) {
+    const parts = main.split(conflictMarker);
+    main = parts[0].trim();
+    conflict = parts.slice(1).join(conflictMarker).trim();
+  }
+  return { main, conflict };
+};
+
+const parseAnalysisSections = (analysis: string) => {
+  const markers = ['智能体理由:', '智能体理由：', '智能体理由', '【智能体理由】'];
+  let main = analysis || '';
+  let reasons = '';
+  for (const marker of markers) {
+    if (main.includes(marker)) {
+      const parts = main.split(marker);
+      main = parts[0].trim();
+      reasons = parts.slice(1).join(marker).trim();
+      if (reasons.startsWith(':') || reasons.startsWith('：')) {
+        reasons = reasons.slice(1).trim();
+      }
+      break;
+    }
+  }
+  const reasonLines = reasons
+    ? reasons
+      .split(/\r?\n/)
+      .map(line => line.replace(/^[-•\d.\s]+/, '').trim())
+      .filter(Boolean)
+    : [];
+  return { main, reasonLines };
+};
+
 const PredictionScreen = () => {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState('');
-  const [model, setModel] = useState('glm-4.6v-flash');
+  const [model, setModel] = useState('glm-4-flash-250414');
   const [fractalData, setFractalData] = useState<FractalData | null>(null);
+  const [stockName, setStockName] = useState<string>('');
 
   const route = useRoute();
   const navigation = useNavigation();
-
-  useEffect(() => {
-    // @ts-ignore
-    if (route.params?.code) {
-      // @ts-ignore
-      const newCode = route.params.code;
-      // @ts-ignore
-      const initialModel = route.params.model || 'glm-4.6v-flash';
-
-      setCode(newCode);
-      setModel(initialModel);
-
-      // Auto trigger prediction
-      handlePredict(newCode, initialModel);
-    }
-  }, [route.params]);
 
   const parseMetadata = (analysis: string) => {
     const parts = analysis.split('---METADATA---');
@@ -53,7 +83,7 @@ const PredictionScreen = () => {
     return analysis;
   };
 
-  const handlePredict = async (searchCode: string = code, currentModel: string = model) => {
+  const handlePredict = useCallback(async (searchCode: string, currentModel: string) => {
     if (!searchCode) return;
     setLoading(true);
     setError('');
@@ -78,7 +108,26 @@ const PredictionScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // @ts-ignore
+    if (route.params?.code) {
+      // @ts-ignore
+      const newCode = route.params.code;
+      // @ts-ignore
+      const initialModel = route.params.model || 'glm-4-flash-250414';
+      // @ts-ignore
+      const initialName = route.params.name || '';
+
+      setCode(newCode);
+      setModel(initialModel);
+      setStockName(initialName);
+
+      // Auto trigger prediction
+      handlePredict(newCode, initialModel);
+    }
+  }, [route.params]);
 
   return (
     <View style={styles.container}>
@@ -95,7 +144,7 @@ const PredictionScreen = () => {
             value={code}
             onChangeText={setCode}
             style={styles.input}
-            right={<TextInput.Icon icon="magnify" onPress={() => handlePredict(code)} />}
+            right={<TextInput.Icon icon="magnify" onPress={() => handlePredict(code, model)} />}
           />
 
           <Text style={styles.sectionTitle}>选择预测模型</Text>
@@ -104,7 +153,7 @@ const PredictionScreen = () => {
             onValueChange={setModel}
             buttons={[
               {
-                value: 'glm-4.6v-flash',
+                value: 'glm-4-flash-250414',
                 label: '深度分析',
                 icon: 'brain',
               },
@@ -117,7 +166,7 @@ const PredictionScreen = () => {
             style={styles.modelSelector}
           />
 
-          <Button mode="contained" onPress={() => handlePredict(code)} loading={loading} style={styles.button}>
+          <Button mode="contained" onPress={() => handlePredict(code, model)} loading={loading} style={styles.button}>
             开始预测
           </Button>
         </View>
@@ -131,7 +180,7 @@ const PredictionScreen = () => {
             <Card style={styles.card}>
               <Card.Title title={model === 'fractal' ? "分形几何预测" : "AI 深度分析"} />
               <Card.Content>
-                <Text variant="titleLarge" style={styles.stockTitle}>{result.code}</Text>
+                <Text variant="titleLarge" style={styles.stockTitle}>{stockName ? `${stockName} (${result.code})` : result.code}</Text>
 
                 <View style={styles.confidenceContainer}>
                   <Text variant="bodyMedium">置信度: {(result.confidence * 100).toFixed(1)}%</Text>
@@ -142,13 +191,41 @@ const PredictionScreen = () => {
                   <FractalChart data={fractalData} />
                 )}
 
-                <Text variant="titleMedium" style={styles.sectionTitle}>走势分析</Text>
-                <Text variant="bodyMedium" style={styles.analysisText}>{result.analysis}</Text>
+                {(() => {
+                  const analysisSections = parseAnalysisSections(result.analysis);
+                  return (
+                    <>
+                      <Text variant="titleMedium" style={styles.sectionTitle}>走势分析</Text>
+                      <Text variant="bodyMedium" style={styles.analysisText}>{analysisSections.main}</Text>
+                      {analysisSections.reasonLines.length > 0 ? (
+                        <>
+                          <Text variant="titleMedium" style={styles.sectionTitle}>智能体理由</Text>
+                          {analysisSections.reasonLines.map((line, index) => (
+                            <Text key={`${line}-${index}`} variant="bodySmall" style={styles.newsText}>{line}</Text>
+                          ))}
+                        </>
+                      ) : null}
+                    </>
+                  );
+                })()}
 
                 {result.news_summary ? (
                   <>
-                    <Text variant="titleMedium" style={styles.sectionTitle}>关键摘要</Text>
-                    <Text variant="bodySmall" style={styles.newsText}>{result.news_summary}</Text>
+                    {(() => {
+                      const sections = parseSummarySections(result.news_summary);
+                      return (
+                        <>
+                          {sections.main ? (
+                            <>
+                              <Text variant="titleMedium" style={styles.sectionTitle}>关键摘要</Text>
+                              <Text variant="bodySmall" style={styles.newsText}>{sections.main}</Text>
+                            </>
+                          ) : null}
+                          <Text variant="titleMedium" style={styles.sectionTitle}>冲突说明</Text>
+                          <Text variant="bodySmall" style={styles.newsText}>{sections.conflict || '暂无冲突说明'}</Text>
+                        </>
+                      );
+                    })()}
                   </>
                 ) : null}
               </Card.Content>

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Text, Card, ActivityIndicator, Appbar, DataTable } from 'react-native-paper';
+import { Text, Card, ActivityIndicator, Appbar } from 'react-native-paper';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { getSectorStocks } from '../api/stock';
@@ -18,7 +18,7 @@ const SectorDetailScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStocks = async () => {
+  const fetchStocks = useCallback(async () => {
     try {
       setError(null);
       const data = await getSectorStocks(sectorCode);
@@ -30,11 +30,11 @@ const SectorDetailScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [sectorCode]);
 
   useEffect(() => {
     fetchStocks();
-  }, [sectorCode]);
+  }, [fetchStocks]);
 
   const onRefresh = () => {
     setRefreshing(true);

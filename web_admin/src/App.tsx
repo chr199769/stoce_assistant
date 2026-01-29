@@ -1,9 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { Layout, Menu } from 'antd';
-import { AreaChartOutlined, DashboardOutlined } from '@ant-design/icons';
+import { AreaChartOutlined, AppstoreOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import EvaluationList from './pages/EvaluationList';
-import MarketTrends from './pages/MarketTrends';
+import GraphEntities from './pages/GraphEntities';
+import GraphEvents from './pages/GraphEvents';
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -37,8 +38,13 @@ const App: React.FC = () => {
               },
               {
                 key: '2',
-                icon: <DashboardOutlined />,
-                label: <Link to="/market-trends">市场趋势</Link>
+                icon: <AppstoreOutlined />,
+                label: <Link to="/graph-entities">图谱实体</Link>
+              },
+              {
+                key: '3',
+                icon: <ClockCircleOutlined />,
+                label: <Link to="/graph-events">事件查询</Link>
               }
             ]}
           />
@@ -49,7 +55,8 @@ const App: React.FC = () => {
             <div style={{ padding: 24, minHeight: 360 }}>
               <Routes>
                 <Route path="/evaluations" element={<EvaluationList />} />
-                <Route path="/market-trends" element={<MarketTrends />} />
+                <Route path="/graph-entities" element={<GraphEntities />} />
+                <Route path="/graph-events" element={<GraphEvents />} />
                 <Route path="/" element={<EvaluationList />} />
               </Routes>
             </div>

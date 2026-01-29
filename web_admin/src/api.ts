@@ -6,7 +6,7 @@ import axios from 'axios';
 // I'll check gateway main.go later. Assuming 8080 for now.
 
 const api = axios.create({
-  baseURL: '/api', // Proxy in vite config
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
 });
 
 export interface EvaluationRecord {
@@ -35,39 +35,76 @@ export const deleteEvaluation = async (id: string) => {
   return res.data;
 };
 
-export interface MarketTrend {
-  id: number;
-  source: string;
-  title: string;
-  summary: string;
-  original_url: string;
-  financial_relevance: number;
-  related_sectors: string[];
-  related_stocks?: string[];
-  impact_analysis?: string;
-  sentiment_score: number;
-  impact_type: string;
-  impact_scope: string;
-  weight: number;
-  is_still_valid: boolean;
-  created_at: string;
-  updated_at: string;
+export interface GraphEntity {
+  id: string;
+  type: string;
+  name: string;
+  attributes?: Record<string, string>;
 }
 
-export const getMarketTrends = async (page = 1, pageSize = 20, impactType?: string) => {
-  const params: any = { page, page_size: pageSize };
-  if (impactType) params.impact_type = impactType;
-  const res = await api.get<{ trends: MarketTrend[], total: number }>('/market/trends', { params });
+export interface GraphEvidence {
+  id: string;
+  category: string;
+  summary: string;
+  confidence: number;
+  source: string;
+  timestamp: number;
+}
+
+export interface GraphRelation {
+  source: GraphEntity;
+  target: GraphEntity;
+  type: string;
+  strength: number;
+  evidence?: GraphEvidence;
+  updated_at: number;
+}
+
+export interface GraphEvent {
+  id: string;
+  type: string;
+  entities: GraphEntity[];
+  impact_direction: number;
+  impact_strength: number;
+  confidence: number;
+  timestamp: number;
+  source: string;
+  dedupe_key: string;
+}
+
+export const getGraphNeighborhood = async (params: {
+  entity_type: string;
+  entity_id: string;
+  relation_types?: string;
+  depth?: number;
+  start_time?: number;
+  end_time?: number;
+  max_edges?: number;
+}) => {
+  const res = await api.get<{ entities: GraphEntity[]; relations: GraphRelation[] }>('/graph/neighborhood', { params });
   return res.data;
 };
 
-export const updateMarketTrend = async (trend: MarketTrend) => {
-  const res = await api.post<{ success: boolean }>('/market/trends/update', { trend });
+export const getGraphEntityProfile = async (params: {
+  entity_type: string;
+  entity_id: string;
+  start_time?: number;
+  end_time?: number;
+}) => {
+  const res = await api.get<{ entity?: GraphEntity; relations: GraphRelation[]; events: GraphEvent[] }>('/graph/entity', { params });
   return res.data;
 };
 
-export const deleteMarketTrend = async (id: number) => {
-  const res = await api.delete<{ success: boolean }>(`/market/trends/${id}`);
+export const searchGraphEvents = async (params: {
+  entity_type: string;
+  entity_id: string;
+  event_types?: string;
+  start_time?: number;
+  end_time?: number;
+  min_confidence?: number;
+  limit?: number;
+}) => {
+  const res = await api.get<{ events: GraphEvent[] }>('/graph/events', { params });
   return res.data;
 };
 

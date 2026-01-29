@@ -234,7 +234,7 @@ func (s *AIServiceImpl) AnalyzeMarket(ctx context.Context, req *ai.MarketAnalysi
 				_, err := s.GetPrediction(context.Background(), &ai.GetPredictionRequest{
 					Code:  code,
 					Days:  3,                // 预测未来3天
-					Model: "glm-4.6v-flash", // 使用默认模型
+					Model: "glm-4-flash-250414", // 使用默认模型
 				})
 				if err != nil {
 					log.Printf("自动预测失败: %s, %v", code, err)

@@ -3,6 +3,7 @@ package rpc
 import (
 	"sync"
 
+	"stock_assistant/backend/gateway/config"
 	"stock_assistant/backend/gateway/kitex_gen/ai/aiservice"
 )
 
@@ -19,8 +20,12 @@ func InitAI() {
 
 func initAIClient() {
 	var err error
-	// In a real environment, use service discovery
-	opts := getClientOptions("AI_SERVICE_ADDR", "127.0.0.1:8889")
+	addr := "127.0.0.1:8889"
+	cfg := config.Get()
+	if cfg != nil && cfg.RPC != nil && cfg.RPC.AIServiceAddr != "" {
+		addr = cfg.RPC.AIServiceAddr
+	}
+	opts := getClientOptions(addr)
 	AIClient, err = aiservice.NewClient("ai_service", opts...)
 	if err != nil {
 		panic(err)

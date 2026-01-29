@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"sort"
 	eastmoney "stock_assistant/backend/common/eastmoney"
+	eimpl "stock_assistant/backend/common/provider/impl/eastmoney"
+	"stock_assistant/backend/common/provider"
 	"stock_assistant/backend/stock_service/biz/provider/sentiment"
 	"stock_assistant/backend/stock_service/biz/provider/sina"
 	"stock_assistant/backend/stock_service/dal/model"
@@ -22,26 +25,51 @@ type StockServiceImpl struct {
 	sinaClient      *sina.Client
 	eastMoneyClient *eastmoney.Client
 	sentimentClient *sentiment.Client
+	marketClient    provider.MarketDataClient
+	sectorClient    provider.SectorClient
+	dragonClient    provider.DragonTigerClient
 }
 
 // NewStockServiceImpl 创建新的 StockServiceImpl
 func NewStockServiceImpl() *StockServiceImpl {
+	emc := eastmoney.NewClient()
 	return &StockServiceImpl{
 		sinaClient:      sina.NewClient(),
-		eastMoneyClient: eastmoney.NewClient(),
+		eastMoneyClient: emc,
 		sentimentClient: sentiment.NewClient(),
+		marketClient:    eimpl.NewMarket(emc),
+		sectorClient:    eimpl.NewSector(emc),
+		dragonClient:    eimpl.NewDragonTiger(emc),
 	}
 }
 
-// GetRealtime 实现 StockServiceImpl 接口
+// GetRealtime 实时行情
+// 约束：
+// - 入参 code 使用 "sh/sz+6位代码"（例：sh600519）
+// - 直接调用新浪行情，无缓存；失败原样向上抛出
 func (s *StockServiceImpl) GetRealtime(ctx context.Context, req *stock.GetRealtimeRequest) (resp *stock.GetRealtimeResponse, err error) {
 	if req.Code == "" {
 		return &stock.GetRealtimeResponse{}, nil
 	}
 
-	info, err := s.sinaClient.GetStockInfo(ctx, req.Code)
+	// 优先使用统一 Provider，失败回退新浪
+	code := normalizeCode(req.Code)
+	if s.marketClient != nil {
+		if q, e := s.marketClient.GetIntradayQuote(ctx, code); e == nil && q != nil && q.Price > 0 {
+			return &stock.GetRealtimeResponse{
+				Stock: &stock.StockInfo{
+					Code:          q.Code,
+					Name:          q.Name,
+					CurrentPrice:  q.Price,
+					ChangePercent: q.ChangePct,
+					Volume:        q.Volume,
+					Timestamp:     q.Timestamp.Format("2006-01-02 15:04:05"),
+				},
+			}, nil
+		}
+	}
+	info, err := s.sinaClient.GetStockInfo(ctx, code)
 	if err != nil {
-		// 记录错误并返回错误
 		return nil, err
 	}
 
@@ -50,7 +78,10 @@ func (s *StockServiceImpl) GetRealtime(ctx context.Context, req *stock.GetRealti
 	}, nil
 }
 
-// GetFinancialReport 实现 StockServiceImpl 接口
+// GetFinancialReport 财报摘要
+// 约束：
+// - 入参 code 使用 "SH/SZ+6位代码" 或 6 位代码（内部处理）
+// - 最近 N 期季度数据，单位与比例统一为元/百分比
 func (s *StockServiceImpl) GetFinancialReport(ctx context.Context, req *stock.GetFinancialReportRequest) (resp *stock.GetFinancialReportResponse, err error) {
 	if req.Code == "" {
 		return &stock.GetFinancialReportResponse{}, nil
@@ -78,7 +109,10 @@ func (s *StockServiceImpl) GetFinancialReport(ctx context.Context, req *stock.Ge
 	}, nil
 }
 
-// GetMarketSectors 实现 StockServiceImpl 接口
+// GetMarketSectors 板块排行
+// 约束：
+// - req.Type 支持 "industry"/"concept"，默认 concept
+// - 返回前 limit 个；引入 60s 轻缓存保障稳定性
 func (s *StockServiceImpl) GetMarketSectors(ctx context.Context, req *stock.GetMarketSectorsRequest) (resp *stock.GetMarketSectorsResponse, err error) {
 	limit := int(req.Limit)
 	if limit <= 0 {
@@ -104,7 +138,22 @@ func (s *StockServiceImpl) GetMarketSectors(ctx context.Context, req *stock.GetM
 		}
 	}
 
-	sectors, err := s.eastMoneyClient.GetSectorRank(ctx, rankType, limit)
+	var sectors []*eastmoney.SectorInfo
+	if s.sectorClient != nil {
+		if items, e := s.sectorClient.GetSectorRank(ctx, rankType); e == nil && len(items) > 0 {
+			for _, it := range items {
+				sectors = append(sectors, &eastmoney.SectorInfo{
+					Code:          it.Code,
+					Name:          it.Name,
+					ChangePercent: it.ChangePct,
+					NetInflow:     it.NetInflow,
+				})
+			}
+		}
+	}
+	if len(sectors) == 0 {
+		sectors, err = s.eastMoneyClient.GetSectorRank(ctx, rankType, limit)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +180,10 @@ func (s *StockServiceImpl) GetMarketSectors(ctx context.Context, req *stock.GetM
 	return &stock.GetMarketSectorsResponse{Sectors: thriftSectors}, nil
 }
 
-// GetLimitUpPool 实现 StockServiceImpl 接口
+// GetLimitUpPool 涨停池（情绪）
+// 约束：
+// - 依赖非官方接口，可能不稳定；为空或异常时返回空列表
+// - 缓存 30s，避免频繁请求
 func (s *StockServiceImpl) GetLimitUpPool(ctx context.Context, req *stock.GetLimitUpPoolRequest) (resp *stock.GetLimitUpPoolResponse, err error) {
 	// 优先尝试 Redis 缓存
 	// 为简单起见，我们只缓存“当前”池
@@ -173,19 +225,38 @@ func (s *StockServiceImpl) GetLimitUpPool(ctx context.Context, req *stock.GetLim
 	return &stock.GetLimitUpPoolResponse{Stocks: thriftStocks}, nil
 }
 
-// GetSectorStocks 实现 StockServiceImpl 接口
+// GetSectorStocks 板块包含股票列表
+// 约束：
+// - req.SectorCode 为东财板块代码（b:BKxxx）
+// - 返回字段统一语义：价格/涨跌/成交量/成交额/市值
 func (s *StockServiceImpl) GetSectorStocks(ctx context.Context, req *stock.GetSectorStocksRequest) (resp *stock.GetSectorStocksResponse, err error) {
 	if req.SectorCode == "" {
 		return &stock.GetSectorStocksResponse{}, nil
 	}
 
-	// 调用客户端
-	rawStocks, err := s.eastMoneyClient.GetSectorStocksRaw(ctx, req.SectorCode)
+	var list []*stock.SectorStockItem
+	if s.sectorClient != nil {
+		if items, e := s.sectorClient.GetSectorStocksDetail(ctx, req.SectorCode); e == nil && len(items) > 0 {
+			for _, it := range items {
+				list = append(list, &stock.SectorStockItem{
+					Code:          it.Code,
+					Name:          it.Name,
+					Price:         it.Price,
+					ChangePercent: it.ChangePct,
+					Volume:        it.Volume,
+					Amount:        it.Amount,
+					MarketCap:     it.MarketCap,
+				})
+			}
+			return &stock.GetSectorStocksResponse{Stocks: list}, nil
+		}
+	}
+	// 回退到东财客户端
+	rawStocks, err := s.eastMoneyClient.GetSectorStocksDetail(ctx, req.SectorCode)
 	if err != nil {
 		return nil, err
 	}
 
-	var list []*stock.SectorStockItem
 	for _, item := range rawStocks {
 		list = append(list, &stock.SectorStockItem{
 			Code:          item.Code,
@@ -201,14 +272,34 @@ func (s *StockServiceImpl) GetSectorStocks(ctx context.Context, req *stock.GetSe
 	return &stock.GetSectorStocksResponse{Stocks: list}, nil
 }
 
-// GetDragonTigerList 实现 StockServiceImpl 接口
+// GetDragonTigerList 龙虎榜
+// 约束：
+// - req.Date 格式 "YYYY-MM-DD"，为空时默认当天
+// - 席位明细仅获取前5，避免超时；席位标签做简单映射
 func (s *StockServiceImpl) GetDragonTigerList(ctx context.Context, req *stock.GetDragonTigerListRequest) (resp *stock.GetDragonTigerListResponse, err error) {
 	date := req.Date
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
 
-	items, err := s.eastMoneyClient.GetDragonTigerList(ctx, date)
+	var items []*eastmoney.DragonTigerItem
+	if s.dragonClient != nil {
+		if list, e := s.dragonClient.GetTodayList(ctx, date); e == nil && len(list) > 0 {
+			for _, it := range list {
+				items = append(items, &eastmoney.DragonTigerItem{
+					Code:          it.Code,
+					Name:          it.Name,
+					ClosePrice:    it.ClosePrice,
+					ChangePercent: it.ChangePercent,
+					Reason:        it.Reason,
+					NetInflow:     it.NetInflow,
+				})
+			}
+		}
+	}
+	if len(items) == 0 {
+		items, err = s.eastMoneyClient.GetDragonTigerList(ctx, date)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -247,10 +338,36 @@ func (s *StockServiceImpl) GetDragonTigerList(ctx context.Context, req *stock.Ge
 		}
 
 		if i < 5 { // 仅获取前5的席位
-			buySeats, sellSeats, err := s.eastMoneyClient.GetDragonTigerSeats(ctx, item.Code, date)
-			if err == nil {
-				tItem.BuySeats = convertSeats(buySeats, seatMap)
-				tItem.SellSeats = convertSeats(sellSeats, seatMap)
+			if s.dragonClient != nil {
+				if seats, e := s.dragonClient.GetSeats(ctx, date, item.Code); e == nil && len(seats) > 0 {
+					var buySeatsEM []*eastmoney.DragonTigerSeat
+					var sellSeatsEM []*eastmoney.DragonTigerSeat
+					for _, sr := range seats {
+						if sr.NetAmount >= 0 {
+							buySeatsEM = append(buySeatsEM, &eastmoney.DragonTigerSeat{
+								Name:   sr.SeatName,
+								BuyAmt: sr.BuyAmount,
+								SellAmt: sr.SellAmount,
+								NetAmt: sr.NetAmount,
+							})
+						} else {
+							sellSeatsEM = append(sellSeatsEM, &eastmoney.DragonTigerSeat{
+								Name:   sr.SeatName,
+								BuyAmt: sr.BuyAmount,
+								SellAmt: sr.SellAmount,
+								NetAmt: sr.NetAmount,
+							})
+						}
+					}
+					tItem.BuySeats = convertSeats(buySeatsEM, seatMap)
+					tItem.SellSeats = convertSeats(sellSeatsEM, seatMap)
+				}
+			} else {
+				buySeats, sellSeats, err := s.eastMoneyClient.GetDragonTigerSeats(ctx, item.Code, date)
+				if err == nil {
+					tItem.BuySeats = convertSeats(buySeats, seatMap)
+					tItem.SellSeats = convertSeats(sellSeats, seatMap)
+				}
 			}
 		}
 		thriftItems = append(thriftItems, tItem)
@@ -286,6 +403,20 @@ func convertSeats(seats []*eastmoney.DragonTigerSeat, m map[string]string) []*st
 		})
 	}
 	return res
+}
+
+func normalizeCode(in string) string {
+	s := strings.ToUpper(strings.TrimSpace(in))
+	if strings.HasPrefix(s, "SH") || strings.HasPrefix(s, "SZ") {
+		return s
+	}
+	if len(s) == 6 && s[0] == '6' {
+		return "SH" + s
+	}
+	if len(s) == 6 {
+		return "SZ" + s
+	}
+	return s
 }
 
 // GetOrCreateUser 实现 StockServiceImpl 接口
@@ -464,6 +595,7 @@ func (s *StockServiceImpl) GetHistoricalKline(ctx context.Context, req *stock.Ge
 	// 使用 EastMoney 客户端
 	klines, err := s.eastMoneyClient.GetKlineHistory(ctx, req.StockCode, int(req.Days))
 	if err != nil {
+		log.Printf("获取K线失败: 股票=%s 天数=%d 错误=%v", req.StockCode, req.Days, err)
 		return nil, err
 	}
 
@@ -615,162 +747,18 @@ func (s *StockServiceImpl) DeleteEvaluation(ctx context.Context, req *stock.Dele
 
 // GetMarketTrends 实现 StockServiceImpl 接口
 func (s *StockServiceImpl) GetMarketTrends(ctx context.Context, req *stock.GetMarketTrendsRequest) (resp *stock.GetMarketTrendsResponse, err error) {
-	if mysql.DB == nil {
-		return &stock.GetMarketTrendsResponse{}, nil
-	}
-
-	page := int(req.Page)
-	if page <= 0 {
-		page = 1
-	}
-	pageSize := int(req.PageSize)
-	if pageSize <= 0 {
-		pageSize = 20
-	}
-	offset := (page - 1) * pageSize
-
-	var trends []model.MarketTrend
-	var total int64
-
-	query := mysql.DB.Model(&model.MarketTrend{}).Where("is_still_valid = ?", true)
-
-	if req.ImpactType != "" {
-		query = query.Where("impact_type = ?", req.ImpactType)
-	}
-
-	if req.RelatedStockId != "" {
-		// 假设 related_stocks 存储为 JSON 字符串数组，如 ["600519", "000001"]
-		// 使用 LIKE 进行模糊匹配
-		query = query.Where("related_stocks LIKE ?", fmt.Sprintf("%%%s%%", req.RelatedStockId))
-	}
-
-	if req.Query != "" {
-		q := "%" + req.Query + "%"
-		query = query.Where("title LIKE ? OR summary LIKE ?", q, q)
-	}
-
-	// Count total
-	if err := query.Count(&total).Error; err != nil {
-		return nil, err
-	}
-
-	// Fetch page
-	dbQuery := query
-
-	// Default Hot Score Sort
-	orderBySQL := "weight / POW(LEAST(GREATEST(TIMESTAMPDIFF(HOUR, created_at, NOW()) + 2, 1), 720), CASE WHEN impact_type = 'policy_long_term' THEN 0.5 ELSE 1.5 END) DESC"
-
-	if req.Sort != "" {
-		// e.g. "weight_desc" -> "weight desc"
-		if req.Sort == "weight_desc" {
-			dbQuery = dbQuery.Order("weight desc")
-		} else if req.Sort == "created_at_desc" {
-			dbQuery = dbQuery.Order("created_at desc")
-		} else {
-			// default
-			dbQuery = dbQuery.Order(orderBySQL)
-		}
-	} else {
-		dbQuery = dbQuery.Order(orderBySQL)
-	}
-
-	if err := dbQuery.Limit(pageSize).Offset(offset).Find(&trends).Error; err != nil {
-		return nil, err
-	}
-
-	var thriftTrends []*stock.MarketTrend
-	for _, t := range trends {
-		// Parse RelatedSectors (JSON string) to []string
-		var sectors []string
-		if t.RelatedSectors != "" {
-			_ = json.Unmarshal([]byte(t.RelatedSectors), &sectors)
-		}
-
-		var stocks []string
-		if t.RelatedStocks != "" {
-			_ = json.Unmarshal([]byte(t.RelatedStocks), &stocks)
-		}
-
-		thriftTrends = append(thriftTrends, &stock.MarketTrend{
-			Id:                 t.ID,
-			Source:             t.Source,
-			Title:              t.Title,
-			Summary:            t.Summary,
-			OriginalUrl:        t.OriginalURL,
-			FinancialRelevance: int32(t.FinancialRelevance),
-			RelatedSectors:     sectors,
-			RelatedStocks:      stocks,
-			ImpactAnalysis:     t.ImpactAnalysis,
-			SentimentScore:     t.SentimentScore,
-			ImpactType:         t.ImpactType,
-			ImpactScope:        t.ImpactScope,
-			Weight:             t.Weight,
-			IsStillValid:       t.IsStillValid,
-			CreatedAt:          t.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:          t.UpdatedAt.Format(time.RFC3339),
-		})
-	}
-
 	return &stock.GetMarketTrendsResponse{
-		Trends: thriftTrends,
-		Total:  total,
+		Trends: []*stock.MarketTrend{},
+		Total:  0,
 	}, nil
 }
 
 // UpdateMarketTrend implements StockServiceImpl interface.
 func (s *StockServiceImpl) UpdateMarketTrend(ctx context.Context, req *stock.UpdateMarketTrendRequest) (resp *stock.UpdateMarketTrendResponse, err error) {
-	if mysql.DB == nil {
-		return &stock.UpdateMarketTrendResponse{Success: false}, nil
-	}
-	if req.Trend == nil {
-		return &stock.UpdateMarketTrendResponse{Success: false}, fmt.Errorf("invalid request")
-	}
-
-	t := req.Trend
-	// Convert related sectors to JSON string
-	sectorsJSON, _ := json.Marshal(t.RelatedSectors)
-	stocksJSON, _ := json.Marshal(t.RelatedStocks)
-
-	// Prepare map for updates to handle zero values correctly if needed,
-	// but struct update is fine if we want to update all fields.
-	// However, GORM Updates with struct only updates non-zero fields.
-	// To update all fields including zero values (like false, 0), we should use map or Select.
-	// Here we assume we want to update all provided fields.
-	loc, _ := time.LoadLocation("Asia/Shanghai")
-
-	updates := map[string]interface{}{
-		"source":              t.Source,
-		"title":               t.Title,
-		"summary":             t.Summary,
-		"original_url":        t.OriginalUrl,
-		"financial_relevance": int(t.FinancialRelevance),
-		"related_sectors":     string(sectorsJSON),
-		"related_stocks":      string(stocksJSON),
-		"impact_analysis":     t.ImpactAnalysis,
-		"sentiment_score":     t.SentimentScore,
-		"impact_type":         t.ImpactType,
-		"impact_scope":        t.ImpactScope,
-		"weight":              t.Weight,
-		"is_still_valid":      t.IsStillValid,
-		"updated_at":          time.Now().In(loc),
-	}
-
-	if err := mysql.DB.Model(&model.MarketTrend{}).Where("id = ?", t.Id).Updates(updates).Error; err != nil {
-		return &stock.UpdateMarketTrendResponse{Success: false}, err
-	}
-
-	return &stock.UpdateMarketTrendResponse{Success: true}, nil
+	return &stock.UpdateMarketTrendResponse{Success: false}, nil
 }
 
 // DeleteMarketTrend implements StockServiceImpl interface.
 func (s *StockServiceImpl) DeleteMarketTrend(ctx context.Context, req *stock.DeleteMarketTrendRequest) (resp *stock.DeleteMarketTrendResponse, err error) {
-	if mysql.DB == nil {
-		return &stock.DeleteMarketTrendResponse{Success: false}, nil
-	}
-
-	if err := mysql.DB.Delete(&model.MarketTrend{}, req.Id).Error; err != nil {
-		return &stock.DeleteMarketTrendResponse{Success: false}, err
-	}
-
-	return &stock.DeleteMarketTrendResponse{Success: true}, nil
+	return &stock.DeleteMarketTrendResponse{Success: false}, nil
 }

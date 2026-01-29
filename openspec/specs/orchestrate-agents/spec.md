@@ -1,0 +1,46 @@
+# orchestrate-agents Specification
+
+## Purpose
+TBD - created by archiving change add-stock-prediction-kg-multi-agent. Update Purpose after archive.
+## Requirements
+### Requirement: 多智能体协作编排
+系统 MUST 支持多智能体按角色分工协作并输出统一结论。
+
+#### Scenario: 协作生成预测结论
+- **WHEN** 预测请求进入协作流程
+- **THEN** 分配基本面、事件、技术面、风险四类智能体
+- **AND** 汇总各智能体的观点与证据生成统一结论
+
+### Requirement: 协作冲突处理
+系统 MUST 在智能体结论冲突时给出冲突说明与最终裁决逻辑。
+
+#### Scenario: 处理相反结论
+- **WHEN** 智能体对预测方向给出相反结论
+- **THEN** 输出冲突原因与各自证据
+- **AND** 基于预设权重给出最终预测方向与置信度
+
+### Requirement: 协作可观测性与追踪
+系统 MUST 使用 LangGraph 建模智能体编排图，并通过 Langfuse 记录每个节点的输入/输出、耗时与错误，形成可回放的 Trace 链路。
+
+#### Scenario: 追踪完整协作链路
+- **WHEN** 预测请求经过智能体编排
+- **THEN** 系统生成唯一 Trace ID 与可视化有向图
+- **AND** 为每个节点记录输入/输出、耗时与错误信息
+- **AND** 支持在后端或管理端查询并回放该链路
+
+### Requirement: 提示词文件化管理
+系统 MUST 将智能体提示词以 .prompt 文件进行统一管理并加载。
+
+#### Scenario: 使用提示词文件
+- **WHEN** 智能体编排加载提示词
+- **THEN** 系统从约定目录读取对应的 .prompt 文件
+- **AND** 支持按角色与版本选择提示词文件
+
+### Requirement: 限流重试策略
+系统 MUST 在多智能体协作调用外部模型时提供限流重试机制，避免因 QPS 限制导致整体失败。
+
+#### Scenario: 遭遇限流时重试
+- **WHEN** 外部模型返回限流或可重试错误
+- **THEN** 系统按指数退避策略进行有限次重试
+- **AND** 超过重试上限后返回可解释错误与部分结果
+

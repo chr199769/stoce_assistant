@@ -7,14 +7,25 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/hertz-contrib/cors"
+	"stock_assistant/backend/gateway/config"
 	"stock_assistant/backend/gateway/biz/rpc"
+	api "stock_assistant/backend/gateway/biz/handler/api"
 )
 
 func main() {
+	if err := config.Init(); err != nil {
+		panic(err)
+	}
 	rpc.Init()
 	rpc.InitAI()
+	rpc.InitKnowledgeGraph()
+	addrValue := ":8080"
+	cfg := config.Get()
+	if cfg != nil && cfg.Server != nil && cfg.Server.Addr != "" {
+		addrValue = cfg.Server.Addr
+	}
 	h := server.Default(
-		server.WithHostPorts(":8080"),
+		server.WithHostPorts(addrValue),
 		server.WithReadTimeout(60*time.Second),
 		server.WithWriteTimeout(60*time.Second),
 		server.WithIdleTimeout(60*time.Second),
@@ -24,5 +35,7 @@ func main() {
 	h.Use(cors.Default())
 
 	register(h)
+	h.GET("/api/akshare/macro", api.GetAkShareMacro)
+	h.GET("/api/akshare/news", api.GetAkShareNews)
 	h.Spin()
 }

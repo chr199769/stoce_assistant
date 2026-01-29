@@ -14,6 +14,18 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
 
+  neo4j:
+    image: neo4j:5
+    container_name: stock_neo4j
+    restart: always
+    environment:
+      NEO4J_AUTH: "neo4j/neo4j_password"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+
   # --- Backend Services ---
   stock-service:
     build:
@@ -44,6 +56,20 @@ services:
       # but we can override here.
       LANGFUSE_PUBLIC_KEY: "pk-lf-your-public-key-here"
       LANGFUSE_SECRET_KEY: "sk-lf-your-secret-key-here"
+
+  knowledge-graph:
+    build:
+      context: ../backend/knowledge_graph
+    container_name: knowledge_graph
+    restart: always
+    depends_on:
+      - neo4j
+    ports:
+      - "8890:8890"
+    environment:
+      NEO4J_URI: "neo4j://neo4j:7687"
+      NEO4J_USER: "neo4j"
+      NEO4J_PASSWORD: "neo4j_password"
 
   # --- Prediction Tracking & Eval ---
   # Langfuse requires Postgres, ClickHouse, Redis
@@ -167,3 +193,4 @@ volumes:
   langfuse_redis_data:
   langfuse_minio_data:
   mysql_data:
+  neo4j_data:

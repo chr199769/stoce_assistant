@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import StockList from '../components/StockList';
-import { useNavigation } from '@react-navigation/native';
+import { getWatchlist } from '../api/stock';
 
 interface WatchlistItem {
   stock_code: string;
@@ -13,7 +13,6 @@ interface WatchlistItem {
 const WatchlistScreen = () => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
-  const navigation = useNavigation();
 
   useEffect(() => {
     fetchWatchlist();
@@ -29,11 +28,7 @@ const WatchlistScreen = () => {
         return;
       }
 
-      // 1. Get watchlist items
-      // Note: Replace localhost with your machine IP if running on device
-      const response = await fetch(`http://localhost:8080/api/watchlist?user_id=${userId}`);
-      const json = await response.json();
-      
+      const json = await getWatchlist(userId);
       if (json.items) {
         // 2. Ideally we need to fetch price info for each stock.
         // For now, we mock the price info or use the code as name.

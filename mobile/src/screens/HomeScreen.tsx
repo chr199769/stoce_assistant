@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar, TouchableOpacity } from 'react-native';
-import { Card, Text, FAB, Dialog, Portal, TextInput, Button, ActivityIndicator, Divider, SegmentedButtons, Chip } from 'react-native-paper';
-import { getRealtime, recognizeStockImage, getPrediction, addWatchlist, removeWatchlist, getWatchlist } from '../api/stock';
+import { View, StyleSheet, ScrollView, Alert, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { Card, Text, FAB, Dialog, Portal, TextInput, Button, Chip } from 'react-native-paper';
+import { getRealtime, recognizeStockImage, addWatchlist, removeWatchlist, getWatchlist } from '../api/stock';
 import { RealtimeResponse, PredictionResponse } from '../types';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -11,23 +11,65 @@ import FractalChart, { FractalData } from '../components/FractalChart';
 
 const WATCHLIST_KEY = 'stock_watchlist';
 
+const parseSummarySections = (summary: string) => {
+  const evidenceMarker = '证据摘要:';
+  const conflictMarker = '冲突说明:';
+  let main = summary || '';
+  let conflict = '';
+  if (main.includes(evidenceMarker)) {
+    const parts = main.split(evidenceMarker);
+    main = parts[0].trim();
+    const rest = parts.slice(1).join(evidenceMarker).trim();
+    if (rest.includes(conflictMarker)) {
+      const conflictParts = rest.split(conflictMarker);
+      conflict = conflictParts.slice(1).join(conflictMarker).trim();
+    }
+  } else if (main.includes(conflictMarker)) {
+    const parts = main.split(conflictMarker);
+    main = parts[0].trim();
+    conflict = parts.slice(1).join(conflictMarker).trim();
+  }
+  return { main, conflict };
+};
+
+const parseAnalysisSections = (analysis: string) => {
+  const markers = ['智能体理由:', '智能体理由：', '智能体理由', '【智能体理由】'];
+  let main = analysis || '';
+  let reasons = '';
+  for (const marker of markers) {
+    if (main.includes(marker)) {
+      const parts = main.split(marker);
+      main = parts[0].trim();
+      reasons = parts.slice(1).join(marker).trim();
+      if (reasons.startsWith(':') || reasons.startsWith('：')) {
+        reasons = reasons.slice(1).trim();
+      }
+      break;
+    }
+  }
+  const reasonLines = reasons
+    ? reasons
+        .split(/\r?\n/)
+        .map(line => line.replace(/^[-•\d.\s]+/, '').trim())
+        .filter(Boolean)
+    : [];
+  return { main, reasonLines };
+};
+
 const HomeScreen = () => {
   const [stocks, setStocks] = useState<RealtimeResponse[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const watchlistRef = useRef<string[]>([]);
   const [fabOpen, setFabOpen] = useState(false);
-  const [predictions, setPredictions] = useState<{ [key: string]: PredictionResponse }>({});
-  const [predicting, setPredicting] = useState<{ [key: string]: boolean }>({});
-  const [expandedStock, setExpandedStock] = useState<string | null>(null);
+  const [predicting, _setPredicting] = useState<{ [key: string]: boolean }>({});
   const [singlePredictCode, setSinglePredictCode] = useState('');
-  const [singlePredictLoading, setSinglePredictLoading] = useState(false);
   const [predictionDialogVisible, setPredictionDialogVisible] = useState(false);
-  const [currentPrediction, setCurrentPrediction] = useState<PredictionResponse | null>(null);
-  const [currentFractalData, setCurrentFractalData] = useState<FractalData | null>(null);
-  const [selectedModel, setSelectedModel] = useState('glm-4.6v-flash');
+  const [currentPrediction, _setCurrentPrediction] = useState<PredictionResponse | null>(null);
+  const [currentFractalData, _setCurrentFractalData] = useState<FractalData | null>(null);
+  const [selectedModel, setSelectedModel] = useState('glm-4-flash-250414');
 
   const { user } = useAuth();
   const navigation = useNavigation();
@@ -38,11 +80,7 @@ const HomeScreen = () => {
   }, [watchlist]);
 
   // Load watchlist on mount
-  useEffect(() => {
-    loadWatchlist();
-  }, []);
-
-  const loadWatchlist = async () => {
+  const loadWatchlist = useCallback(async () => {
     try {
       if (user) {
         console.log('Loading remote watchlist for user:', user.id);
@@ -60,7 +98,11 @@ const HomeScreen = () => {
       console.error('Failed to load watchlist', e);
       setWatchlist([]);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    loadWatchlist();
+  }, [loadWatchlist]);
 
   const saveWatchlist = async (newList: string[]) => {
     try {
@@ -71,7 +113,7 @@ const HomeScreen = () => {
     }
   };
 
-  const fetchStocks = async () => {
+  const fetchStocks = useCallback(async () => {
     // If user is logged in, merge local watchlist with remote
     let currentList = [...watchlist];
 
@@ -118,7 +160,7 @@ const HomeScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [watchlist]);
 
   const isMarketOpen = () => {
     const now = new Date();
@@ -143,7 +185,7 @@ const HomeScreen = () => {
         }
       }, 3000);
       return () => clearInterval(interval);
-    }, [watchlist])
+    }, [fetchStocks])
   );
 
   const showDialog = () => setVisible(true);
@@ -249,27 +291,10 @@ const HomeScreen = () => {
     }
   };
 
-  const parseMetadata = (analysis: string) => {
-    const parts = analysis.split('---METADATA---');
-    if (parts.length > 1) {
-      try {
-        const metadataJson = parts[1].trim();
-        const metadata = JSON.parse(metadataJson);
-        return {
-            text: parts[0].trim(),
-            fractalData: metadata.fractal_data || null
-        };
-      } catch (e) {
-        console.error("Failed to parse metadata", e);
-      }
-    }
-    return { text: analysis, fractalData: null };
-  };
-
-  const handlePredict = async (code: string) => {
+  const handlePredict = async (code: string, name?: string) => {
     // Navigate to Prediction Screen directly with the selected model
     // @ts-ignore
-    navigation.navigate('Prediction', { code, model: selectedModel });
+    navigation.navigate('Prediction', { code, model: selectedModel, name });
   };
 
   const handleSinglePredict = async () => {
@@ -308,8 +333,8 @@ const HomeScreen = () => {
           <View style={styles.modelSelectorContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <Chip 
-                    selected={selectedModel === 'glm-4.6v-flash'} 
-                    onPress={() => setSelectedModel('glm-4.6v-flash')}
+                    selected={selectedModel === 'glm-4-flash-250414'} 
+                    onPress={() => setSelectedModel('glm-4-flash-250414')}
                     style={styles.modelChip}
                     icon="brain"
                 >深度分析</Chip>
@@ -359,7 +384,7 @@ const HomeScreen = () => {
               <View style={styles.actionRow}>
                 <Button
                   mode="outlined"
-                  onPress={() => handlePredict(stock.code)}
+                  onPress={() => handlePredict(stock.code, stock.name)}
                   compact
                   icon="crystal-ball"
                   style={styles.predictBtn}
@@ -387,14 +412,42 @@ const HomeScreen = () => {
                     <FractalChart data={currentFractalData} />
                 )}
 
-                <Text variant="bodyMedium" style={{ lineHeight: 20 }}>
-                  {currentPrediction.analysis}
-                </Text>
+                {(() => {
+                  const analysisSections = parseAnalysisSections(currentPrediction.analysis);
+                  return (
+                    <>
+                      <Text variant="bodyMedium" style={{ lineHeight: 20 }}>
+                        {analysisSections.main}
+                      </Text>
+                      {analysisSections.reasonLines.length > 0 ? (
+                        <>
+                          {analysisSections.reasonLines.map((line, index) => (
+                            <Text key={`${line}-${index}`} variant="bodySmall" style={[styles.newsText, { marginTop: index === 0 ? 8 : 0 }]}>
+                              🤖 {line}
+                            </Text>
+                          ))}
+                        </>
+                      ) : null}
+                    </>
+                  );
+                })()}
                 {currentPrediction.news_summary && (
                   <View style={styles.newsBox}>
-                    <Text variant="bodySmall" style={styles.newsText}>
-                      📰 {currentPrediction.news_summary}
-                    </Text>
+                    {(() => {
+                      const sections = parseSummarySections(currentPrediction.news_summary);
+                      return (
+                        <>
+                          {sections.main ? (
+                            <Text variant="bodySmall" style={styles.newsText}>
+                              📰 {sections.main}
+                            </Text>
+                          ) : null}
+                          <Text variant="bodySmall" style={styles.newsText}>
+                            ⚠️ {sections.conflict || '暂无冲突说明'}
+                          </Text>
+                        </>
+                      );
+                    })()}
                   </View>
                 )}
               </ScrollView>

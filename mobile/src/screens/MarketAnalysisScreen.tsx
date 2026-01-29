@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import { Text, Card, ActivityIndicator, Chip, useTheme } from 'react-native-paper';
+import { Text, Card, ActivityIndicator, Chip } from 'react-native-paper';
 import { analyzeMarket } from '../api/stock';
 import { MarketAnalysisResponse } from '../types';
 
 const MarketAnalysisScreen = () => {
-  const theme = useTheme();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<MarketAnalysisResponse | null>(null);
 

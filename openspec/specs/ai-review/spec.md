@@ -84,14 +84,18 @@ The agent MUST output reports in Markdown format with specific sections tailored
   ```
 
 ### Requirement: Time-Based Context Awareness
-The system MUST automatically determine the type of analysis to generate based on the current system time.
+The system MUST automatically determine the type of analysis and the target date description based on the current system time.
 
-#### Scenario: Auto-detect analysis type
+#### Scenario: Auto-detect analysis type and date
 - **WHEN** a review request is received without explicit type
 - **THEN** determine type based on time ranges:
   - **Pre-market**: 08:00 to 09:25
   - **Intra-day**: 09:30 to 15:00
   - **Post-market**: 15:00 to 08:00 (next day)
+- **AND** determine target date description for the prompt:
+  - If Pre-market (Today): "今天"
+  - If Post-market (Today, before midnight): "明天" (or next trading day)
+  - If Post-market (Tomorrow, before pre-market): "今天"
 
 ### Requirement: Intraday Market Sentinel
 系统 MUST 提供实时的市场哨兵服务，分析盘中板块轮动和异常成交量。

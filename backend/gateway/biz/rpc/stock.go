@@ -3,6 +3,7 @@ package rpc
 import (
 	"sync"
 
+	"stock_assistant/backend/gateway/config"
 	"stock_assistant/backend/gateway/kitex_gen/stock/stockservice"
 )
 
@@ -19,9 +20,12 @@ func Init() {
 
 func initStockClient() {
 	var err error
-	// In a real environment, use service discovery (e.g., etcd/consul)
-	// For local development/demo, direct address is fine or simple resolver
-	opts := getClientOptions("STOCK_SERVICE_ADDR", "127.0.0.1:8888")
+	addr := "127.0.0.1:8888"
+	cfg := config.Get()
+	if cfg != nil && cfg.RPC != nil && cfg.RPC.StockServiceAddr != "" {
+		addr = cfg.RPC.StockServiceAddr
+	}
+	opts := getClientOptions(addr)
 	StockClient, err = stockservice.NewClient("stock_service", opts...)
 	if err != nil {
 		panic(err)

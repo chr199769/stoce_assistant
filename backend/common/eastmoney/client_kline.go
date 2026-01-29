@@ -19,71 +19,105 @@ type KlineResponse struct {
 }
 
 func (c *Client) GetKlineHistory(ctx context.Context, code string, days int) ([]*KlineItem, error) {
-	secID := "0." + code
-	// 如果代码包含点，假设已经是 secID (例如 1.000001)
-	if strings.Contains(code, ".") {
-		secID = code
-	} else if len(code) > 2 {
-		prefix := code[:2]
-		numCode := code
-		if prefix == "sh" || prefix == "sz" {
-			numCode = code[2:]
+	secID := getSecId(code)
+	hosts := []string{
+		"https://push2his.eastmoney.com",
+		"https://push2.eastmoney.com",
+	}
+	// 说明：多主机轮询以提升可用性；服务端偶发 EOF/限流时快速切换
+	var lastErr error
+	for i, host := range hosts {
+		url := fmt.Sprintf("%s/api/qt/stock/kline/get?fields1=f1&fields2=f51,f52,f53,f54,f55,f56,f59&klt=101&fqt=1&secid=%s&lmt=%d&end=20500101", host, secID, days)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			lastErr = err
+			continue
 		}
-		
-		if prefix == "sh" {
-			secID = "1." + numCode
-		} else if prefix == "sz" {
-			secID = "0." + numCode
-		} else {
-			if numCode[0] == '6' {
-				secID = "1." + numCode
-			} else {
-				secID = "0." + numCode
-			}
+		resp, err := c.doRequest(req)
+		if err != nil {
+			lastErr = err
+			continue
 		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var result KlineResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			lastErr = err
+			continue
+		}
+		if result.Data == nil || len(result.Data.Klines) == 0 {
+			lastErr = fmt.Errorf("no kline data")
+			continue
+		}
+		return parseKlineItems(result.Data.Klines), nil
+		_ = i
 	}
-
-	url := fmt.Sprintf("https://push2his.eastmoney.com/api/qt/stock/kline/get?fields1=f1&fields2=f51,f52,f53,f54,f55,f56,f59&klt=101&fqt=1&secid=%s&lmt=%d&end=20500101", secID, days)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
+	if lastErr != nil {
+		return nil, lastErr
 	}
+	return nil, fmt.Errorf("kline fetch failed")
+}
 
-	resp, err := c.doRequest(req)
-	if err != nil {
-		return nil, err
+func (c *Client) GetKlineHistoryWithKlt(ctx context.Context, code string, limit int, klt int) ([]*KlineItem, error) {
+	secID := getSecId(code)
+	hosts := []string{
+		"https://push2his.eastmoney.com",
+		"https://push2.eastmoney.com",
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	// 说明：多主机轮询以提升可用性；klt 周期由适配层映射
+	var lastErr error
+	for _, host := range hosts {
+		url := fmt.Sprintf("%s/api/qt/stock/kline/get?fields1=f1&fields2=f51,f52,f53,f54,f55,f56,f59&klt=%d&fqt=1&secid=%s&lmt=%d&end=20500101", host, klt, secID, limit)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		resp, err := c.doRequest(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var result KlineResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			lastErr = err
+			continue
+		}
+		if result.Data == nil || len(result.Data.Klines) == 0 {
+			lastErr = fmt.Errorf("no kline data")
+			continue
+		}
+		return parseKlineItems(result.Data.Klines), nil
 	}
-
-	var result KlineResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
+	if lastErr != nil {
+		return nil, lastErr
 	}
+	return nil, fmt.Errorf("kline fetch failed")
+}
 
-	if result.Data == nil {
-		return nil, fmt.Errorf("no kline data")
-	}
-
+func parseKlineItems(raw []string) []*KlineItem {
 	var klines []*KlineItem
-	for _, kStr := range result.Data.Klines {
+	for _, kStr := range raw {
 		parts := strings.Split(kStr, ",")
 		if len(parts) < 7 {
 			continue
 		}
-		
 		open, _ := strconv.ParseFloat(parts[1], 64)
 		close, _ := strconv.ParseFloat(parts[2], 64)
 		high, _ := strconv.ParseFloat(parts[3], 64)
 		low, _ := strconv.ParseFloat(parts[4], 64)
 		vol, _ := strconv.ParseInt(parts[5], 10, 64)
 		changePct, _ := strconv.ParseFloat(parts[6], 64)
-
 		klines = append(klines, &KlineItem{
 			Date:          parts[0],
 			Open:          open,
@@ -94,6 +128,5 @@ func (c *Client) GetKlineHistory(ctx context.Context, code string, days int) ([]
 			ChangePercent: changePct,
 		})
 	}
-
-	return klines, nil
+	return klines
 }

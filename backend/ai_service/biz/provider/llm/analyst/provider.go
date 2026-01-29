@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"stock_assistant/backend/ai_service/biz/provider/langfuse"
 	"stock_assistant/backend/ai_service/biz/provider/llm/core"
 	"stock_assistant/backend/ai_service/biz/provider/prompt"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
 	"stock_assistant/backend/ai_service/kitex_gen/stock"
+	"stock_assistant/backend/common/langfuse"
 
 	"github.com/tmc/langchaingo/llms"
 )
@@ -45,6 +45,13 @@ func (p *Provider) ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo
 	}
 
 	log.Printf("使用 LLM 提供商进行市场复盘: %s, 模型: %s", cfg.Provider, cfg.ModelName)
+
+	if p.lf != nil {
+		traceID := p.lf.CreateTrace(ctx, "MarketReview", map[string]interface{}{
+			"date": date,
+		})
+		ctx = langfuse.WithTraceID(ctx, traceID)
+	}
 
 	// 2. 创建 LLM
 	llmClient, err := core.NewModel(ctx, cfg)
@@ -108,7 +115,9 @@ func (p *Provider) ReviewMarket(ctx context.Context, sectors []*stock.SectorInfo
 	}
 
 	// 5. 生成
-	resp, err := llmClient.GenerateContent(ctx, messages)
+	ctx = core.WithModelName(ctx, cfg.ModelName)
+	ctx = core.WithGenerationName(ctx, "LLM-ReviewMarket")
+	resp, err := core.GenerateContentWithRetry(ctx, llmClient, messages)
 	if err != nil {
 		return nil, fmt.Errorf("生成复盘失败: %w", err)
 	}
@@ -153,6 +162,13 @@ func (p *Provider) AnalyzeMarket(ctx context.Context, sectors []*stock.SectorInf
 	}
 
 	log.Printf("使用 LLM 提供商进行市场分析: %s, 模型: %s", cfg.Provider, cfg.ModelName)
+
+	if p.lf != nil {
+		traceID := p.lf.CreateTrace(ctx, "MarketAnalysis", map[string]interface{}{
+			"date": date,
+		})
+		ctx = langfuse.WithTraceID(ctx, traceID)
+	}
 
 	// 2. 创建 LLM
 	llmClient, err := core.NewModel(ctx, cfg)
@@ -204,9 +220,9 @@ func (p *Provider) AnalyzeMarket(ctx context.Context, sectors []*stock.SectorInf
 	}
 
 	// 5. 生成
-	genStart := time.Now()
-	resp, err := llmClient.GenerateContent(ctx, messages)
-	genEnd := time.Now()
+	ctx = core.WithModelName(ctx, cfg.ModelName)
+	ctx = core.WithGenerationName(ctx, "LLM-AnalyzeMarket")
+	resp, err := core.GenerateContentWithRetry(ctx, llmClient, messages)
 	if err != nil {
 		return nil, nil, fmt.Errorf("生成分析失败: %w", err)
 	}
@@ -313,32 +329,6 @@ func (p *Provider) AnalyzeMarket(ctx context.Context, sectors []*stock.SectorInf
 
 	analysis.SentimentScore = sentimentScore
 
-	// 8. Langfuse 追踪
-	if p.lf != nil {
-		traceID := p.lf.CreateTrace(ctx, "MarketAnalysis", map[string]interface{}{
-			"date": date,
-		})
-
-		var lfInput []map[string]interface{}
-		lfInput = append(lfInput, map[string]interface{}{
-			"role":    "user",
-			"content": promptStr,
-		})
-
-		lfOutput := map[string]interface{}{
-			"role":    "assistant",
-			"content": content,
-		}
-
-		// 记录分析结果元数据
-		metadata := map[string]interface{}{
-			"sentiment_score": sentimentScore,
-			"policy_score":    analysis.PolicyScore,
-		}
-
-		p.lf.CreateGeneration(ctx, traceID, "LLM-AnalyzeMarket", cfg.ModelName, lfInput, lfOutput, metadata, genStart, genEnd)
-	}
-
 	// 注意：自动追踪推荐股票逻辑暂时移除或移到 Handler 层，因为这里不持有 stockClient
 	// 我们需要从 analysis 中提取 stockCodes (如果上面解析失败则为空)
 	var stockCodes []string
@@ -368,6 +358,13 @@ func (p *Provider) ProcessMarketTrends(ctx context.Context, items []*ai.RawTrend
 		}
 	} else {
 		return nil, fmt.Errorf("未找到配置")
+	}
+
+	if p.lf != nil {
+		traceID := p.lf.CreateTrace(ctx, "MarketTrendsProcessing", map[string]interface{}{
+			"items": len(items),
+		})
+		ctx = langfuse.WithTraceID(ctx, traceID)
 	}
 
 	// 2. 创建 LLM
@@ -414,7 +411,9 @@ func (p *Provider) ProcessMarketTrends(ctx context.Context, items []*ai.RawTrend
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	resp, err := llmClient.GenerateContent(ctxWithTimeout, messages)
+	ctxWithTimeout = core.WithModelName(ctxWithTimeout, cfg.ModelName)
+	ctxWithTimeout = core.WithGenerationName(ctxWithTimeout, "LLM-ProcessTrends")
+	resp, err := core.GenerateContentWithRetry(ctxWithTimeout, llmClient, messages)
 	if err != nil {
 		return nil, fmt.Errorf("生成分析失败: %w", err)
 	}

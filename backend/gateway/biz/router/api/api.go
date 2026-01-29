@@ -32,10 +32,6 @@ func Register(r *server.Hertz) {
 			_market.GET("/limit_up", append(_getlimituppoolMw(), api.GetLimitUpPool)...)
 			_market.POST("/review", append(_marketreviewMw(), api.MarketReview)...)
 			_market.GET("/sectors", append(_getmarketsectorsMw(), api.GetMarketSectors)...)
-			_market.GET("/trends", append(_getmarkettrendsMw(), api.GetMarketTrends)...)
-			_trends := _market.Group("/trends", _trendsMw()...)
-			_trends.DELETE("/:id", append(_deletemarkettrendMw(), api.DeleteMarketTrend)...)
-			_trends.POST("/update", append(_updatemarkettrendMw(), api.UpdateMarketTrend)...)
 		}
 		{
 			_prediction := _api.Group("/prediction", _predictionMw()...)

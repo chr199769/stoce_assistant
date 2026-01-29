@@ -13,6 +13,7 @@ import (
 	"stock_assistant/backend/ai_service/biz/provider/llm/core"
 	"stock_assistant/backend/ai_service/biz/provider/prompt"
 	ai "stock_assistant/backend/ai_service/kitex_gen/ai"
+	"stock_assistant/backend/common/langfuse"
 
 	"github.com/tmc/langchaingo/llms"
 )
@@ -59,6 +60,13 @@ func (p *Provider) RecognizeImage(ctx context.Context, imageData []byte, modelNa
 
 	log.Printf("使用 LLM 提供商进行图像识别: %s, 模型: %s", cfg.Provider, cfg.ModelName)
 
+	if lf := langfuse.GetLangfuse(); lf != nil {
+		traceID := lf.CreateTrace(ctx, "ImageRecognition", map[string]interface{}{
+			"model": cfg.ModelName,
+		})
+		ctx = langfuse.WithTraceID(ctx, traceID)
+	}
+
 	// 2. 创建 LLM
 	llmClient, err := core.NewModel(ctx, cfg)
 	if err != nil {
@@ -89,7 +97,9 @@ func (p *Provider) RecognizeImage(ctx context.Context, imageData []byte, modelNa
 
 	// 5. 生成内容
 	log.Printf("[DEBUG] RecognizeImage Prompt:\n%s", promptStr)
-	resp, err := llmClient.GenerateContent(ctx, messages)
+	ctx = core.WithModelName(ctx, cfg.ModelName)
+	ctx = core.WithGenerationName(ctx, "LLM-ImageRecognition")
+	resp, err := core.GenerateContentWithRetry(ctx, llmClient, messages)
 	if err != nil {
 		return nil, fmt.Errorf("生成内容失败: %w", err)
 	}

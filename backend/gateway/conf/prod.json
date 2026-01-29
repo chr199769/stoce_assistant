@@ -1,0 +1,10 @@
+{
+  "server": {
+    "addr": ":8080"
+  },
+  "rpc": {
+    "ai_service_addr": "127.0.0.1:8889",
+    "stock_service_addr": "127.0.0.1:8888",
+    "knowledge_graph_addr": "127.0.0.1:8890"
+  }
+}

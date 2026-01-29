@@ -1,0 +1,10 @@
+{
+  "neo4j": {
+    "uri": "neo4j://localhost:7687",
+    "user": "neo4j",
+    "password": "12345678"
+  },
+  "server": {
+    "addr": ":8890"
+  }
+}

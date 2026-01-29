@@ -9,14 +9,20 @@ import (
 	"strings"
 
 	eastmoney "stock_assistant/backend/common/eastmoney"
+	eimpl "stock_assistant/backend/common/provider/impl/eastmoney"
+	"stock_assistant/backend/common/provider"
 )
 
 type StockPriceTool struct {
-	Client stockservice.Client
+	Client       stockservice.Client
+	MarketClient provider.MarketDataClient
 }
 
 func NewStockPriceTool(client stockservice.Client) *StockPriceTool {
-	return &StockPriceTool{Client: client}
+	return &StockPriceTool{
+		Client:       client,
+		MarketClient: eimpl.NewMarket(eastmoney.NewClient()),
+	}
 }
 
 func (t *StockPriceTool) Name() string {
@@ -50,11 +56,19 @@ func (t *StockPriceTool) Call(ctx context.Context, input string) (string, error)
 	}, input)
 
 	log.Printf("StockPriceTool 被调用，输入: [%s]\n", input)
+	// 优先走统一 Provider 实时报价
+	code := normalizeCode(input)
+	if q, err := t.MarketClient.GetIntradayQuote(ctx, code); err == nil && q != nil {
+		result := fmt.Sprintf("股票: %s (%s), 价格: %.2f, 涨跌幅: %.2f%%, 成交量: %d",
+			q.Name, q.Code, q.Price, q.ChangePct, q.Volume)
+		log.Printf("StockPriceTool 成功(Provider): %s\n", result)
+		return result, nil
+	}
+	// 回退到 RPC (新浪)
 	req := &stock.GetRealtimeRequest{Code: input}
 	resp, err := t.Client.GetRealtime(ctx, req)
 	if err != nil {
 		log.Printf("StockPriceTool 获取实时数据错误: %v\n", err)
-		// Return error as string observation so the Agent knows it failed
 		return fmt.Sprintf("获取股票数据失败: %v", err), nil
 	}
 	if resp.Stock == nil {
@@ -63,17 +77,29 @@ func (t *StockPriceTool) Call(ctx context.Context, input string) (string, error)
 	}
 	result := fmt.Sprintf("股票: %s (%s), 价格: %.2f, 涨跌幅: %.2f%%, 成交量: %d",
 		resp.Stock.Name, resp.Stock.Code, resp.Stock.CurrentPrice, resp.Stock.ChangePercent, resp.Stock.Volume)
-	log.Printf("StockPriceTool 成功: %s\n", result)
+	log.Printf("StockPriceTool 成功(RPC): %s\n", result)
 	return result, nil
 }
 
 type StockAnalysisTool struct {
 	EastMoneyClient *eastmoney.Client
+	MarketClient    provider.MarketDataClient
+	DragonClient    provider.DragonTigerClient
+	NoticeClient    provider.NoticeClient
+	PopularityClient provider.PopularityClient
+	IndustryClient  provider.IndustryClient
+	ChipClient      provider.ChipClient
 }
 
 func NewStockAnalysisTool() *StockAnalysisTool {
 	return &StockAnalysisTool{
 		EastMoneyClient: eastmoney.NewClient(),
+		MarketClient:    eimpl.NewMarket(eastmoney.NewClient()),
+		DragonClient:    eimpl.NewDragonTiger(eastmoney.NewClient()),
+		NoticeClient:    eimpl.NewNotice(eastmoney.NewClient()),
+		PopularityClient: eimpl.NewPopularity(eastmoney.NewClient()),
+		IndustryClient:  eimpl.NewIndustry(eastmoney.NewClient()),
+		ChipClient:      eimpl.NewChip(eastmoney.NewClient()),
 	}
 }
 
@@ -110,77 +136,86 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 	log.Printf("StockAnalysisTool 被调用，输入: [%s]\n", input)
 
 	// Fetch data
+	code := normalizeCode(input)
 	// 1. Industry
-	industryData, err := t.EastMoneyClient.GetIndustryIndex(ctx, input)
+	industryData, err := t.IndustryClient.GetIndustryIndex(ctx, code)
 	industry := "获取行业信息失败"
 	if err != nil {
 		log.Printf("获取行业失败: %v", err)
 	} else {
-		industry = industryData.String()
+		if industryData != nil {
+			industry = fmt.Sprintf("行业: %s, 地域: %s, 概念: %s",
+				industryData.IndustryName, industryData.RegionName, industryData.ConceptNames)
+		} else {
+			industry = "无行业属性数据"
+		}
 	}
 
 	// 2. Order Book
-	ordersData, err := t.EastMoneyClient.GetOrderBook(ctx, input)
+	ordersData2, err := t.MarketClient.GetOrderBook(ctx, code, 5)
 	orders := "获取盘口失败"
 	if err != nil {
 		log.Printf("获取盘口失败: %v", err)
 	} else {
-		orders = ordersData.String()
+		orders = fmt.Sprintf("买一: %.2f/%d, 卖一: %.2f/%d, 委比: %.2f, 委差: %.2f",
+			ordersData2.Bids[0].Price, ordersData2.Bids[0].Volume,
+			ordersData2.Asks[0].Price, ordersData2.Asks[0].Volume,
+			ordersData2.WeiBi, ordersData2.WeiCha)
 	}
 
 	// 3. Chip Distribution
-	chipData, err := t.EastMoneyClient.GetChipDistribution(ctx, input)
+	chipData, err := t.ChipClient.GetChipDistribution(ctx, code)
 	chip := "获取筹码分布失败"
 	if err != nil {
 		log.Printf("获取筹码分布失败: %v", err)
-	} else if chipData == nil {
-		chip = "无筹码分布数据"
 	} else {
-		chip = chipData.String()
+		if chipData == nil {
+			chip = "无筹码分布数据"
+		} else {
+			chip = fmt.Sprintf("均价: %.2f, 胜率: %.2f%%, 90%%成本区间: %.2f-%.2f",
+				chipData.AverageCost, chipData.WinnerRate, chipData.Cost90Low, chipData.Cost90High)
+		}
 	}
 
 	// 4. Dragon Tiger History
-	lhbData, err := t.EastMoneyClient.GetDragonTigerHistory(ctx, input, 5)
+	lhbData2, err := t.DragonClient.GetHistory(ctx, code, 5)
 	var lhb []string
 	if err != nil {
 		log.Printf("获取龙虎榜历史失败: %v", err)
 	} else {
-		for _, item := range lhbData {
-			lhb = append(lhb, item.String())
+		for _, item := range lhbData2 {
+			lhb = append(lhb, fmt.Sprintf("%s %s 收盘:%.2f 涨跌:%.2f%% 原因:%s 净流入:%.2f",
+				item.Date, item.Code, item.ClosePrice, item.ChangePercent, item.Reason, item.NetInflow))
 		}
 	}
 
 	// 6. Stock Heat (Sentiment)
-	heatData, err := t.EastMoneyClient.GetStockHeat(ctx, input)
+	heatData, err := t.PopularityClient.GetStockHeat(ctx, code)
 	heat := "获取股票热度失败"
 	if err != nil {
 		log.Printf("获取股票热度失败: %v", err)
-	} else if heatData == nil {
-		heat = "股吧排名: >100 (未进入前100)"
 	} else {
-		heat = heatData.String()
+		if heatData == nil {
+			heat = "股吧排名: >100 (未进入前100)"
+		} else {
+			heat = fmt.Sprintf("股吧热度: 排名%d 分数%d 来源:%s", heatData.Rank, heatData.HeatScore, heatData.Source)
+		}
 	}
 
 	// 7. Regulatory Notices (Risk)
-	noticesData, err := t.EastMoneyClient.GetStockNotices(ctx, input, []string{"监管", "问询", "关注函", "立案", "警示"})
+	noticesData, err := t.NoticeClient.GetStockNotices(ctx, code, "", 10)
 	var notices []string
 	if err != nil {
 		log.Printf("获取公告失败: %v", err)
 	} else {
 		for _, item := range noticesData {
-			notices = append(notices, item.String())
+			notices = append(notices, fmt.Sprintf("[%s] %s (%s)", item.Category, item.Title, item.PublishedAt.Format("2006-01-02")))
 		}
 	}
-
-	// 8. Quantitative Risk Control (Severe Abnormal Fluctuation)
-	riskCheck := CheckRiskControlRules(ctx, t.EastMoneyClient, input)
 
 	// Format output
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%s 的分析报告:\n", input))
-
-	sb.WriteString("\n[量化风控检查]\n")
-	sb.WriteString(riskCheck)
 
 	sb.WriteString("\n\n[行业信息]\n")
 	sb.WriteString(industry)
@@ -213,4 +248,18 @@ func (t *StockAnalysisTool) Call(ctx context.Context, input string) (string, err
 	}
 
 	return sb.String(), nil
+}
+
+func normalizeCode(in string) string {
+	s := strings.ToUpper(strings.TrimSpace(in))
+	if strings.HasPrefix(s, "SH") || strings.HasPrefix(s, "SZ") {
+		return s
+	}
+	if len(s) == 6 && s[0] == '6' {
+		return "SH" + s
+	}
+	if len(s) == 6 {
+		return "SZ" + s
+	}
+	return s
 }

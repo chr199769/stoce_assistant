@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"stock_assistant/backend/common/eastmoney"
-	"stock_assistant/backend/stock_service/biz/provider/langfuse"
+	"stock_assistant/backend/common/langfuse"
 	"stock_assistant/backend/stock_service/dal/model"
 	"stock_assistant/backend/stock_service/dal/mysql"
 )
